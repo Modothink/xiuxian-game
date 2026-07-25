@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>微信</title>
+<style>
+/* ===== WeChat PC 基础配色 ===== */
+:root {
+  --sidebar: #2e2e2e;
+  --sidebar-hover: #3a3a3a;
+  --sidebar-active: #3e3e3e;
+  --chat-bg: #f0f0f0;
+  --chat-white: #ffffff;
+  --topbar: #ededed;
+  --bubble-self: #95ec69;
+  --bubble-other: #ffffff;
+  --text-primary: #111111;
+  --text-secondary: #888888;
+  --text-link: #576b95;
+  --border: #e7e7e7;
+  --brand: #07c160;
+  --red-dot: #fa5151;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%; width: 100%; margin: 0; padding: 0;
+  background: var(--chat-bg);
+  font-family: var(--font);
+}
+
+/* ===== 主外壳：全屏微信PC窗口 ===== */
+#app {
+  width: 100%; height: 100vh;
+  display: flex; flex-direction: column;
+  background: var(--chat-bg);
+  overflow: hidden;
+  user-select: none; -webkit-user-select: none;
+}
+
+/* 标题栏 */
+#titlebar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 16px; background: var(--topbar);
+  border-bottom: 1px solid var(--border); min-height: 36px;
+  font-size: 13px; color: var(--text-primary); cursor: default;
+}
+#titlebar .tb-left { display: flex; align-items: center; gap: 8px; }
+#titlebar .tb-avatar {
+  width: 20px; height: 20px; border-radius: 2px;
+  background: var(--brand); display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 11px;
+}
+#titlebar .tb-name { font-weight: 500; cursor: pointer; }
+#titlebar .tb-name:hover { color: var(--brand); }
+#titlebar .tb-ctrl { font-size: 16px; color: #999; cursor: pointer; }
+
+/* 主内容区 */
+#main {
+  display: flex; flex: 1; overflow: hidden; min-height: 0;
+}
+
+/* 左侧联系人列表 */
+#sidebar {
+  width: 200px; min-width: 160px; background: var(--sidebar);
+  display: flex; flex-direction: column;
+  font-size: 13px; color: #ccc;
+}
+#sidebar .sb-search {
+  padding: 10px 12px;
+}
+#sidebar .sb-search input {
+  width: 100%; padding: 4px 8px; border-radius: 3px; border: none;
+  background: #3a3a3a; color: #ccc; font-size: 12px; outline: none;
+}
+#sidebar .sb-search input::placeholder { color: #777; }
+
+#sidebar .sb-contact {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.1s;
+}
+#sidebar .sb-contact:hover { background: var(--sidebar-hover); }
+#sidebar .sb-contact.active {
+  background: var(--sidebar-active);
+  border-left-color: var(--brand);
+}
+#sidebar .sb-contact .sc-avatar {
+  width: 32px; height: 32px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+#sidebar .sb-contact .sc-info { flex: 1; min-width: 0; }
+#sidebar .sb-contact .sc-name { font-size: 13px; color: #ddd; }
+#sidebar .sb-contact .sc-preview { font-size: 11px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sidebar .sb-contact .sc-badge {
+  font-size: 10px; background: var(--red-dot); color: #fff;
+  padding: 1px 5px; border-radius: 8px; min-width: 16px; text-align: center;
+}
+#sidebar .sb-footer {
+  margin-top: auto; padding: 8px 14px;
+  font-size: 11px; color: #aaa;
+  border-top: 1px solid #3a3a3a;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+/* 右侧聊天区 */
+#chat-area {
+  flex: 1; display: flex; flex-direction: column; min-width: 0;
+}
+
+/* 消息列表 */
+#messages {
+  flex: 1; overflow-y: auto; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+#messages::-webkit-scrollbar { width: 4px; }
+#messages::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 2px; }
+
+/* 消息气泡 */
+.msg { display: flex; flex-direction: column; margin-bottom: 2px; }
+.msg-system {
+  align-items: center; text-align: center;
+  padding: 4px 0; font-size: 12px; color: #b0b0b0;
+}
+.msg-from { align-items: flex-start; }
+.msg-to { align-items: flex-end; }
+
+.msg .bubble {
+  max-width: 75%; padding: 8px 12px; border-radius: 4px;
+  font-size: 14px; line-height: 1.55; word-break: break-word;
+  position: relative;
+}
+.msg-from .bubble { background: var(--bubble-other); color: var(--text-primary); }
+.msg-to .bubble { background: var(--bubble-self); color: var(--text-primary); }
+
+.msg .bubble .bubble-title {
+  font-size: 12px; color: var(--text-link); margin-bottom: 2px;
+}
+.msg .bubble .bubble-body { }
+.msg .bubble .bubble-highlight { color: #07c160; font-weight: bold; }
+.msg .bubble .bubble-dim { color: #999; font-size: 13px; }
+
+/* 消息中的操作按钮 */
+.bubble .bubble-actions {
+  display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;
+}
+.bubble .bubble-btn {
+  padding: 4px 10px; border-radius: 3px; border: 1px solid #ddd;
+  background: #fff; font-size: 12px; cursor: pointer;
+  color: var(--text-primary);
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.bubble .bubble-btn:hover { background: #f5f5f5; border-color: var(--brand); color: var(--brand); }
+.bubble .bubble-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.bubble .bubble-btn.accent {
+  background: #07c160; color: #fff; border-color: #07c160;
+}
+.bubble .bubble-btn.accent:hover { background: #06ad56; }
+.bubble .bubble-btn.danger { color: #fa5151; border-color: #fa5151; }
+
+/* 离线收益卡片 */
+.bubble-card {
+  background: #f8f8f8 !important; border: 1px solid #e7e7e7;
+  padding: 10px 12px !important;
+}
+.bubble-card .card-title {
+  font-size: 13px; font-weight: 500; margin-bottom: 4px;
+  color: var(--text-primary);
+}
+.bubble-card .card-row {
+  font-size: 12px; color: #666; padding: 1px 0;
+}
+.bubble-card .card-val { color: var(--brand); font-weight: bold; }
+
+/* 输入区 */
+#input-area {
+  padding: 8px 16px 12px; border-top: 1px solid var(--border);
+  background: #fafafa;
+}
+#input-area .input-tools {
+  display: flex; gap: 12px; padding: 4px 0; font-size: 18px;
+  color: #999; cursor: default;
+}
+#input-area .input-box-wrap {
+  display: flex; gap: 8px; align-items: flex-end;
+}
+#input-area textarea {
+  flex: 1; padding: 6px 10px; border: 1px solid #e0e0e0;
+  border-radius: 3px; font: 13px var(--font); resize: none;
+  outline: none; height: 36px; max-height: 72px;
+  background: #fff; color: var(--text-primary);
+}
+#input-area textarea:focus { border-color: var(--brand); }
+#input-area .send-btn {
+  padding: 6px 16px; background: #e0e0e0; border: none;
+  border-radius: 3px; font: 13px var(--font); cursor: pointer;
+  color: #999;
+}
+#input-area .send-btn.active { background: var(--brand); color: #fff; cursor: pointer; }
+#input-area .action-bar {
+  display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;
+}
+#input-area .action-chip {
+  font-size: 11px; padding: 3px 8px; border-radius: 10px;
+  background: #e8e8e8; color: #666; cursor: pointer;
+  border: none; font-family: var(--font);
+  transition: all 0.15s;
+}
+#input-area .action-chip:hover { background: #d0f0d8; color: var(--brand); }
+#input-area .action-chip:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* 离线弹窗 */
+#modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 100;
+  justify-content: center; align-items: center;
+}
+#modal-overlay.show { display: flex; }
+#modal {
+  background: #fff; border-radius: 6px; width: 320px;
+  overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+}
+#modal .modal-title {
+  padding: 16px 20px 8px; font-size: 15px; font-weight: 500;
+  text-align: center; background: #fff;
+}
+#modal .modal-body { padding: 8px 20px 16px; text-align: center; font-size: 14px; color: #666; }
+#modal .modal-body .val { color: var(--brand); font-size: 22px; font-weight: bold; display: block; margin: 6px 0; }
+#modal .modal-close {
+  width: 100%; padding: 10px; border: none; border-top: 1px solid var(--border);
+  background: #fff; color: var(--text-link); font-size: 14px;
+  cursor: pointer; font-family: var(--font);
+}
+#modal .modal-close:hover { background: #f5f5f5; }
+
+/* 响应式 */
+@media (max-width: 600px) {
+  #app { max-height: 100vh; border-radius: 0; }
+  #sidebar { width: 70px; min-width: 70px; }
+  #sidebar .sb-contact .sc-info { display: none; }
+  #sidebar .sb-contact { justify-content: center; padding: 12px 0; }
+  #sidebar .sb-search { display: none; }
+}
+
+/* ===== 突破进度条（独立横幅） ===== */
+.bt-progress {
+  display: none; align-items: center; position: relative;
+  height: 22px; width: 100%;
+  background: #f5f5f5; overflow: hidden;
+  border-bottom: 1px solid #e7e7e7;
+  cursor: default;
+}
+.bt-progress.visible { display: flex; }
+.bt-progress.ready {
+  cursor: pointer;
+  animation: btPulse 1.5s ease-in-out infinite;
+}
+@keyframes btPulse {
+  0%, 100% { box-shadow: inset 0 0 0 0 rgba(7,193,96,0.3); }
+  50% { box-shadow: inset 0 0 12px 2px rgba(7,193,96,0.15); }
+}
+.bt-progress .bt-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #a8e6cf, #07c160);
+  transition: width 0.5s ease;
+}
+.bt-progress.ready .bt-fill {
+  background: linear-gradient(90deg, #07c160, #00d46a);
+}
+.bt-progress .bt-text {
+  position: relative; z-index: 1;
+  font-size: 12px; font-weight: 600; color: #333;
+  padding: 0 12px; white-space: nowrap; width: 100%;
+}
+.bt-progress.ready .bt-text { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+
+/* ===== 节奏突破渡劫条 ===== */
+#rhythm-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.3); z-index: 200;
+  justify-content: center; align-items: center;
+}
+#rhythm-overlay.active { display: flex; }
+#rhythm-box {
+  background: #fff; border-radius: 8px; padding: 24px 28px;
+  text-align: center; min-width: 320px; max-width: 400px;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+}
+#rhythm-box h3 { font-size: 16px; font-weight: 500; margin-bottom: 4px; color: #333; }
+#rhythm-box .rhythm-hint { font-size: 12px; color: #999; margin-bottom: 16px; }
+#rhythm-bar {
+  width: 100%; height: 8px; background: #e8e8e8; border-radius: 4px;
+  position: relative; overflow: hidden; margin: 8px 0;
+}
+#rhythm-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #07c160; position: absolute; top: -2px;
+  transition: none;
+}
+#rhythm-zone {
+  position: absolute; top: 0; height: 100%;
+  background: rgba(7,193,96,0.2);
+  left: 33%; right: 33%;
+}
+#rhythm-result {
+  font-size: 13px; margin-top: 12px; min-height: 20px;
+}
+#rhythm-result.success { color: #07c160; }
+#rhythm-result.miss { color: #999; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- 标题栏 -->
+  <div id="titlebar">
+    <div class="tb-left">
+      <div class="tb-avatar">修</div>
+      <span class="tb-name" id="tb-name" title="点击或按Esc切换">修仙系统</span>
+    </div>
+    <span class="tb-ctrl" id="tb-ctrl">—</span>
+  </div>
+
+  <!-- 主内容 -->
+  <div id="main">
+    <!-- 左侧联系人 -->
+    <div id="sidebar">
+      <div class="sb-search">
+        <input type="text" placeholder="搜索" disabled>
+      </div>
+      <div id="contact-list">
+        <!-- JS动态生成 -->
+      </div>
+      <div class="sb-footer">
+        <span id="ft-online">—</span>
+        <span id="ft-ver">修炼日志 v1.0</span>
+      </div>
+    </div>
+
+    <!-- 聊天区 -->
+    <div id="chat-area">
+      <div id="messages"></div>
+      <div id="input-area">
+        <div id="bt-progress" class="bt-progress"></div>
+        <div class="input-box-wrap">
+          <textarea id="chat-input" placeholder="修炼：运转周天" rows="1"></textarea>
+          <button class="send-btn" id="send-btn">发送</button>
+        </div>
+        <div class="action-bar" id="action-bar">
+          <!-- JS动态生成 -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 离线弹窗 -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div class="modal-title">🏔️ 闭关归来</div>
+    <div class="modal-body" id="modal-body"></div>
+    <button class="modal-close" id="modal-close">继续修炼</button>
+  </div>
+</div>
+
+<!-- 渡劫节奏条 -->
+<div id="rhythm-overlay">
+  <div id="rhythm-box">
+    <h3>⚡ 天劫降临</h3>
+    <div class="rhythm-hint">按空格键在绿色区域截断灵气…</div>
+    <div id="rhythm-bar">
+      <div id="rhythm-zone"></div>
+      <div id="rhythm-dot"></div>
+    </div>
+    <div id="rhythm-result"></div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   《打工人的修仙之路》 v2.0
+   微信聊天窗口伪装版 | 单HTML | localStorage | Esc切换
+   ================================================================ */
+
+// ==================== 常量 ====================
+
+const REALM_NAMES = ['凡人','炼气·实习期','筑基·转正','金丹·主管','元婴·经理'];
+const REALM_RATES = [0, 1, 3, 10, 30]; // 每境界灵力/秒
+
+const BREAKTHROUGH = [
+  { cost:100,  prob:1.0 },
+  { cost:500,  prob:0.9 },
+  { cost:2000, prob:0.8 },
+  { cost:8000, prob:0.7 },
+];
+
+const PILLS = [
+  { id:'juling', name:'聚灵丹', cost:100, craft:60,  dur:7200, desc:'修炼速度+20%持续2h', icon:'☕' },
+  { id:'jiasu', name:'加速丹', cost:300, craft:180, dur:0,    desc:'离线效率永久+5%',      icon:'⚡' },
+  { id:'tupo',  name:'突破丹', cost:500, craft:300, dur:0,    desc:'下次突破成功率+20%',    icon:'🎯' },
+];
+
+const TREASURES = [
+  { id:'headphone', name:'降噪耳机',  cost:3000, desc:'离线效率+10%', icon:'🎧' },
+  { id:'keyboard',  name:'机械键盘',  cost:5000, desc:'在线产出+15%', icon:'⌨️' },
+  { id:'chair',     name:'人体工学椅', cost:8000, desc:'离线上限+4小时', icon:'💺' },
+];
+
+const OFFLINE_RATE = 0.70;
+const OFFLINE_CAP  = 12 * 3600;
+const PITY_MAX = 3;
+const FAIL_REFUND = 0.30;
+const SAVE_KEY = 'xiuxian_save_v2';
+
+// ==================== 联系人配置 ====================
+
+const CONTACTS = [
+  { id:'system',   name:'系统通知',   icon:'🔔', unlock:0, color:'#fa5151' },
+  { id:'assistant',name:'修炼助手',   icon:'🧘', unlock:0, color:'#07c160' },
+  { id:'divination',name:'每日占卜',  icon:'🔮', unlock:0, color:'#a855f7' },
+  { id:'alchemy',  name:'炼丹炉',     icon:'💊', unlock:3, color:'#e2b04a' },
+  { id:'forge',    name:'法宝阁',     icon:'⚔️', unlock:4, color:'#4ea8c9' },
+];
+
+// ==================== 伪装消息模板 ====================
+
+const FAKE_CHATS = [
+  { from:'项目组-李工', text:'那个需求文档我更新了，你看下第三部分' },
+  { from:'财务-王姐', text:'这个月的报销截止到周五，别忘了提交' },
+  { from:'项目组-李工', text:'好的，明天开会讨论一下排期' },
+  { from:'你', text:'收到，我整理一下发你' },
+  { from:'HR-小张', text:'提醒一下大家，下午3点有全员会议' },
+  { from:'你', text:'报表已经发你邮箱了，请查收' },
+  { from:'运维-老刘', text:'服务器今天要升级，中午12点会有短暂影响' },
+  { from:'项目组-李工', text:'客户那边反馈了一个bug，优先级比较高，有空帮看下' },
+  { from:'你', text:'好的我看看，稍等' },
+  { from:'行政-陈', text:'茶水间新到了一批零食，大家自取～' },
+  { from:'财务-王姐', text:'发票已经开好了，来前台拿一下' },
+  { from:'你', text:'谢谢王姐！' },
+];
+
+// ==================== 梅花易数 · 每日占卜 ====================
+
+const TRIGRAMS={qian:{s:'☰',c:'乾',n:'金',b:'111',num:1},dui:{s:'☱',c:'兑',n:'金',b:'110',num:2},li:{s:'☲',c:'离',n:'火',b:'101',num:3},zhen:{s:'☳',c:'震',n:'木',b:'100',num:4},xun:{s:'☴',c:'巽',n:'木',b:'011',num:5},kan:{s:'☵',c:'坎',n:'水',b:'010',num:6},gen:{s:'☶',c:'艮',n:'土',b:'001',num:7},kun:{s:'☷',c:'坤',n:'土',b:'000',num:8}};
+const TRI_BY_NUM={1:'qian',2:'dui',3:'li',4:'zhen',5:'xun',6:'kan',7:'gen',8:'kun'};
+const BIN_TO_TRI={'111':'qian','110':'dui','101':'li','100':'zhen','011':'xun','010':'kan','001':'gen','000':'kun'};
+const HEXAGRAMS={"111-111":{"n":"乾","s":"䷀","f":"乾为天","d":"刚健中正，天行健，君子以自强不息。","l":5},"000-000":{"n":"坤","s":"䷁","f":"坤为地","d":"柔顺包容，厚德载物，顺应天时。","l":5},"010-100":{"n":"屯","s":"䷂","f":"水雷屯","d":"初生之象，万事开头难，宜守不宜进。","l":3},"001-010":{"n":"蒙","s":"䷃","f":"山水蒙","d":"蒙昧之象，启蒙教育，循循善诱。","l":3},"010-111":{"n":"需","s":"䷄","f":"水天需","d":"等待之象，时机未至，需耐心守候。","l":3},"111-010":{"n":"讼","s":"䷅","f":"天水讼","d":"争讼之象，口舌是非，以和为贵。","l":2},"000-010":{"n":"师","s":"䷆","f":"地水师","d":"师旅之象，用兵之道，纪律严明。","l":3},"010-000":{"n":"比","s":"䷇","f":"水地比","d":"亲比之象，亲近依附，诚信相交。","l":4},"011-111":{"n":"小畜","s":"䷈","f":"风天小畜","d":"蓄养待时，力量尚微，宜积蓄实力。","l":3},"111-110":{"n":"履","s":"䷉","f":"天泽履","d":"谨慎行事，如履薄冰，循礼而行。","l":4},"000-111":{"n":"泰","s":"䷊","f":"地天泰","d":"天地交泰，阴阳调和，万事亨通。","l":5},"111-000":{"n":"否","s":"䷋","f":"天地否","d":"闭塞之象，天地不交，小人道长。","l":2},"111-101":{"n":"同人","s":"䷌","f":"天火同人","d":"和同于人，志同道合，团结合作。","l":4},"101-111":{"n":"大有","s":"䷍","f":"火天大有","d":"如日中天，盛大富有，众望所归。","l":5},"000-001":{"n":"谦","s":"䷎","f":"地山谦","d":"谦虚之象，谦受益，满招损。","l":5},"100-000":{"n":"豫","s":"䷏","f":"雷地豫","d":"欢乐预备之象，安乐祥和，居安思危。","l":4},"110-100":{"n":"随","s":"䷐","f":"泽雷随","d":"随从之象，顺势而为，择善而从。","l":4},"001-011":{"n":"蛊","s":"䷑","f":"山风蛊","d":"腐败之象，积弊已深，革新除弊。","l":3},"000-110":{"n":"临","s":"䷒","f":"地泽临","d":"临莅之象，督导管理，把握时机。","l":4},"011-000":{"n":"观","s":"䷓","f":"风地观","d":"观瞻之象，观察学习，审时度势。","l":4},"101-100":{"n":"噬嗑","s":"䷔","f":"火雷噬嗑","d":"咬合决断之象，刑罚公正，明察秋毫。","l":3},"001-101":{"n":"贲","s":"䷕","f":"山火贲","d":"文饰之象，修饰外表，内质为本。","l":3},"001-000":{"n":"剥","s":"䷖","f":"山地剥","d":"剥落之象，阴盛阳衰，小人得势。","l":2},"000-100":{"n":"复","s":"䷗","f":"地雷复","d":"回复之象，一阳来复，生机重现。","l":4},"111-100":{"n":"无妄","s":"䷘","f":"天雷无妄","d":"无妄之象，真实无伪，不可妄为。","l":4},"001-111":{"n":"大畜","s":"䷙","f":"山天大畜","d":"大蓄积之象，积德累能，厚积薄发。","l":4},"001-100":{"n":"颐","s":"䷚","f":"山雷颐","d":"颐养之象，养身修德，自力更生。","l":4},"110-011":{"n":"大过","s":"䷛","f":"泽风大过","d":"大为过越之象，非常之时，需要非常之人。","l":3},"010-010":{"n":"坎","s":"䷜","f":"坎为水","d":"险陷之象，处险不惊，诚信可脱险。","l":2},"101-101":{"n":"离","s":"䷝","f":"离为火","d":"光明之象，依附正道，光明磊落。","l":4},"110-001":{"n":"咸","s":"䷞","f":"泽山咸","d":"感应之象，阴阳交感，相互感应。","l":4},"100-011":{"n":"恒","s":"䷟","f":"雷风恒","d":"恒久不变之象，持之以恒，长久坚持。","l":4},"111-001":{"n":"遁","s":"䷠","f":"天山遁","d":"退避之象，小人道长，君子退隐。","l":3},"100-111":{"n":"大壮","s":"䷡","f":"天雷大壮","d":"雷动天之象，阳气壮盛，利于进取。","l":4},"101-000":{"n":"晋","s":"䷢","f":"火地晋","d":"晋升之象，事业上升，前途光明。","l":4},"000-101":{"n":"明夷","s":"䷣","f":"地火明夷","d":"光明受损，时运不济，韬光养晦。","l":2},"011-101":{"n":"家人","s":"䷤","f":"风火家人","d":"家庭之象，各司其职，家和万事兴。","l":4},"101-110":{"n":"睽","s":"䷥","f":"火泽睽","d":"乖离之象，意见不合，求同存异。","l":3},"010-001":{"n":"蹇","s":"䷦","f":"水山蹇","d":"蹇难之象，行路艰难，见险而止。","l":2},"100-010":{"n":"解","s":"䷧","f":"雷水解","d":"缓解散开之象，困难消解，危机解除。","l":4},"001-110":{"n":"损","s":"䷨","f":"山泽损","d":"减损之象，损下益上，先失后得。","l":3},"011-100":{"n":"益","s":"䷩","f":"风雷益","d":"增益之象，损上益下，受益无穷。","l":5},"110-111":{"n":"夬","s":"䷪","f":"泽天夬","d":"决断之象，阳刚决阴柔，宜果断决策。","l":4},"111-011":{"n":"姤","s":"䷫","f":"天风姤","d":"相遇之象，阴长阳消，防微杜渐。","l":3},"110-000":{"n":"萃","s":"䷬","f":"泽地萃","d":"聚集之象，汇聚人才，团结合作。","l":4},"000-011":{"n":"升","s":"䷭","f":"地风升","d":"上升之象，步步高升，积小成大。","l":4},"110-010":{"n":"困","s":"䷮","f":"泽水困","d":"困穷之象，陷入困境，守正待时。","l":2},"010-011":{"n":"井","s":"䷯","f":"水风井","d":"水井之象，养人利物，持之以恒。","l":3},"110-101":{"n":"革","s":"䷰","f":"泽火革","d":"变革之象，去旧迎新，时机成熟。","l":4},"101-011":{"n":"鼎","s":"䷱","f":"火风鼎","d":"鼎新之象，革故鼎新，稳重图变。","l":4},"100-100":{"n":"震","s":"䷲","f":"震为雷","d":"震动之象，突发变故，临危不乱。","l":3},"001-001":{"n":"艮","s":"䷳","f":"艮为山","d":"静止之象，时运停滞，宜守不宜攻。","l":3},"011-001":{"n":"渐","s":"䷴","f":"风山渐","d":"渐进之象，循序渐进，稳步前行。","l":4},"100-110":{"n":"归妹","s":"䷵","f":"雷泽归妹","d":"嫁娶之象，位不当，宜守本分。","l":3},"100-101":{"n":"丰","s":"䷶","f":"雷火丰","d":"丰盛之象，盛大丰满，但戒骄戒躁。","l":4},"101-001":{"n":"旅","s":"䷷","f":"火山旅","d":"行旅之象，漂泊在外，谨慎小心。","l":3},"011-011":{"n":"巽","s":"䷸","f":"巽为风","d":"顺从之象，以柔克刚，顺势而为。","l":3},"110-110":{"n":"兑","s":"䷹","f":"兑为泽","d":"喜悦之象，和悦待人，朋友讲习。","l":4},"011-010":{"n":"涣","s":"䷺","f":"风水涣","d":"涣散之象，离散解忧，凝聚人心。","l":3},"010-110":{"n":"节","s":"䷻","f":"水泽节","d":"节制之象，适度节约，不可过度。","l":3},"011-110":{"n":"中孚","s":"䷼","f":"风泽中孚","d":"诚信中正，以诚待人，信誉为本。","l":4},"100-001":{"n":"小过","s":"䷽","f":"雷山小过","d":"小有过越之象，小事可成，大事不宜。","l":3},"010-101":{"n":"既济","s":"䷾","f":"水火既济","d":"已成之象，事已成功，防微杜渐。","l":4},"101-010":{"n":"未济","s":"䷿","f":"火水未济","d":"未成之象，事尚未成，谨慎从事。","l":3}};
+
+const DIVINATION_BUFFS = {
+  5:{label:'大吉',stars:'★★★★★',rate:0.15,dur:14400,desc:'修炼速度 +15%，持续4小时'},
+  4:{label:'吉',stars:'★★★★☆',rate:0.10,dur:10800,desc:'修炼速度 +10%，持续3小时'},
+  3:{label:'中平',stars:'★★★☆☆',rate:0.05,dur:7200,desc:'修炼速度 +5%，持续2小时'},
+  2:{label:'凶',stars:'★★☆☆☆',rate:-0.05,dur:7200,desc:'修炼速度 -5%，但炼丹产出+20%'},
+  1:{label:'大凶',stars:'★☆☆☆☆',rate:-0.10,dur:7200,desc:'修炼速度 -10%，但炼丹产出+40%'},
+};
+
+function dailyDivination() {
+  const d = new Date();
+  const y = d.getFullYear() % 12;
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = d.getHours();
+  // 时辰：子=1 ~ 亥=12
+  const hz = [1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,1][h];
+  const upper = (y + m + day) % 8; const upKey = TRI_BY_NUM[upper === 0 ? 8 : upper];
+  const lower = (y + m + day + hz) % 8; const loKey = TRI_BY_NUM[lower === 0 ? 8 : lower];
+  const moving = (y + m + day + hz) % 6 || 6;
+  const upBin1 = (TRIGRAMS[upKey]||TRIGRAMS.qian).b;
+  const loBin1 = (TRIGRAMS[loKey]||TRIGRAMS.qian).b;
+  const hex = HEXAGRAMS[upBin1+'-'+loBin1] || {n:'未知',s:'?',f:'未知卦象',d:'卦象正在解析中…',l:3};
+  const buff = DIVINATION_BUFFS[hex.l];
+  const today = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+
+  // 计算变卦
+  const upArr = (TRIGRAMS[upKey]||TRIGRAMS.qian).b.split('').map(Number);
+  const loArr = (TRIGRAMS[loKey]||TRIGRAMS.qian).b.split('').map(Number);
+  if (moving <= 3) { const idx = 3-moving; loArr[idx] = loArr[idx]?0:1; }
+  else { const idx = 6-moving; upArr[idx] = upArr[idx]?0:1; }
+  const chUpBin = upArr.join(''), chLoBin = loArr.join('');
+  const changed = HEXAGRAMS[chUpBin+'-'+chLoBin] || hex;
+
+  return { date:today, hex, changed, moving, buff, upperKey:upKey, lowerKey:loKey };
+}
+
+// ==================== 状态初始化 ====================
+
+function createState() {
+  return {
+    realm:0, lingli:0, pity:0, totalSec:0, breakCount:0,
+    crafting:null, pillInv:{}, activePills:{},
+    offlineBonus:0, breakthroughBoost:0,
+    ownedTreasures:[], equippedTreasure:null,
+    log:[], logTs:0,
+    divinationDate:'', divinationBuff:null, // {rate,dur,endTs,level,hex...}
+    createdAt:Date.now(), lastSave:Date.now(), lastOnline:Date.now(),
+  };
+}
+
+// ==================== 存档 ====================
+
+function save() {
+  S.lastSave = S.lastOnline = Date.now();
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    const def = createState();
+    // 逐字段补齐：saved 有的保留，缺失的用默认值
+    for (const k of Object.keys(def)) {
+      if (saved[k] === undefined) saved[k] = def[k];
+    }
+    return saved;
+  } catch(e) { return null; }
+}
+
+// ==================== 离线计算 ====================
+
+function calcOffline() {
+  if (S.realm === 0) return { lingli:0, sec:0 };
+  const elapsed = (Date.now() - S.lastOnline) / 1000;
+  if (elapsed < 30) return { lingli:0, sec:0 };
+  const cap = OFFLINE_CAP + (S.equippedTreasure==='chair'?14400:0);
+  const eff = Math.min(elapsed, cap);
+  let rate = OFFLINE_RATE + S.offlineBonus;
+  if (S.equippedTreasure==='headphone') rate += 0.10;
+  // 离线期间聚灵丹覆盖判断（简化）
+  let mult = 1;
+  if (S.activePills.juling) {
+    const end = S.activePills.juling;
+    const start = end - 7200 * 1000;
+    const offlineEnd = S.lastOnline + eff * 1000;
+    if (end > S.lastOnline && start < offlineEnd) mult = 1.2;
+  }
+  return { lingli: Math.floor(REALM_RATES[S.realm] * eff * rate * mult), sec: eff };
+}
+
+// ==================== 突破 ====================
+
+function doBreakthrough() {
+  if (S.realm >= BREAKTHROUGH.length) return {ok:false, msg:'已是当前版本最高境界'};
+  const cfg = BREAKTHROUGH[S.realm];
+  if (S.lingli < cfg.cost) return {ok:false, msg:`灵力不足！需要 ${cfg.cost}，当前 ${S.lingli}`};
+  S.lingli -= cfg.cost; S.pity++;
+  let prob = cfg.prob;
+  if (S.pity >= PITY_MAX + 1) prob = 1;
+  if (S.breakthroughBoost > 0) { prob = Math.min(1, prob + 0.2); S.breakthroughBoost = 0; }
+  if (Math.random() < prob) {
+    S.realm++; S.pity = 0; S.breakCount++;
+    return {ok:true, success:true, realm:S.realm, name:REALM_NAMES[S.realm], rate:REALM_RATES[S.realm]};
+  } else {
+    const refund = Math.floor(cfg.cost * FAIL_REFUND);
+    S.lingli += refund;
+    return {ok:true, success:false, refund, pity:S.pity};
+  }
+}
+
+// ==================== 炼丹 ====================
+
+function startCraft(recipeId) {
+  const r = PILLS.find(p=>p.id===recipeId);
+  if (!r) return {ok:false, msg:'未知丹方'};
+  if (S.lingli < r.cost) return {ok:false, msg:'灵力不足'};
+  if (S.crafting) return {ok:false, msg:'炼丹炉正在使用中'};
+  S.lingli -= r.cost;
+  S.crafting = { id:r.id, name:r.name, end:Date.now() + r.craft*1000 };
+  return {ok:true, name:r.name, sec:r.craft};
+}
+
+function checkCraft() {
+  if (!S.crafting || Date.now() < S.crafting.end) return null;
+  const id = S.crafting.id, name = S.crafting.name;
+  S.pillInv[id] = (S.pillInv[id]||0) + 1;
+  S.crafting = null;
+  return {id, name};
+}
+
+function usePill(recipeId) {
+  if (!S.pillInv[recipeId] || S.pillInv[recipeId] <= 0) return {ok:false, msg:'丹药不足'};
+  S.pillInv[recipeId]--;
+  const r = PILLS.find(p=>p.id===recipeId);
+  if (r.id==='juling') { S.activePills.juling = Date.now() + r.dur*1000; return {ok:true, msg:'聚灵丹生效！修炼速度+20%，持续2小时'}; }
+  if (r.id==='jiasu') { S.offlineBonus = Math.min(0.2, S.offlineBonus + 0.05); return {ok:true, msg:'加速丹生效！离线效率永久+5%（上限20%）'}; }
+  if (r.id==='tupo')  { S.breakthroughBoost = 1; return {ok:true, msg:'突破丹生效！下次突破成功率+20%'}; }
+  return {ok:false, msg:'未知丹药'};
+}
+
+// ==================== 法宝 ====================
+
+function buyTreasure(tid) {
+  const t = TREASURES.find(tr=>tr.id===tid);
+  if (!t) return {ok:false};
+  if (S.ownedTreasures.includes(tid)) return {ok:false, msg:'已拥有'};
+  if (S.lingli < t.cost) return {ok:false, msg:'灵力不足'};
+  S.lingli -= t.cost; S.ownedTreasures.push(tid);
+  if (!S.equippedTreasure) S.equippedTreasure = tid;
+  return {ok:true, treasure:t};
+}
+
+function equipTreasure(tid) {
+  if (!S.ownedTreasures.includes(tid)) return {ok:false};
+  S.equippedTreasure = tid;
+  return {ok:true, treasure: TREASURES.find(t=>t.id===tid)};
+}
+
+// ==================== 日志 ====================
+
+const FLAVOR = [
+  '你在工位上默默运转周天…',
+  '灵气在 cubicle 之间流转，今日修炼进展顺利。',
+  '同事路过，未察觉你在修炼。',
+  '一杯凉透的咖啡，恰好作为修炼的引子。',
+  '空调出风口送来一缕灵气，你顺势运功。',
+  '你在 Outlook 日历里发现了一处洞天福地。',
+  '周报 deadline 临近，反而激发了修炼灵感。',
+  '会议室里残留的茶香中蕴含着淡淡灵气。',
+  '你的工位恰好位于大楼灵脉节点上。',
+  '屏幕的蓝光与灵气产生了微妙共振。',
+  '你假装盯着屏幕沉思，实则在运转功法。',
+  '午休时分的办公室格外安静——修炼好时机。',
+  '电梯叮咚声像是某种古老咒语，灵气随之波动。',
+  '打印机卡纸的声音掩盖了你的灵力波动。',
+  '你在茶水间偶遇灵光一闪——修为精进。',
+];
+
+const LOG_MAX = 200;
+function addLog(from, text, type) {
+  S.log.push({ from, text, type:type||'', ts:Date.now() });
+  while (S.log.length > LOG_MAX) S.log.shift();
+}
+
+function autoFlavor() {
+  if (S.realm < 1) return;
+  const now = Date.now();
+  if (now - S.logTs > 18000 + Math.random() * 20000) {
+    addLog('修炼助手', FLAVOR[Math.floor(Math.random()*FLAVOR.length)], 'dim');
+    S.logTs = now;
+  }
+}
+
+// ==================== 速率计算 ====================
+
+function getRate() {
+  if (S.realm === 0) return 0;
+  let r = REALM_RATES[S.realm];
+  r = Math.floor(r * getBuffMultiplier());
+  return r;
+}
+
+function getBuffMultiplier() {
+  let m = 1;
+  if (S.activePills.juling && Date.now() < S.activePills.juling) m += 0.2;
+  if (S.equippedTreasure==='keyboard') m += 0.15;
+  if (S.divinationBuff && Date.now() < S.divinationBuff.endTs) m += S.divinationBuff.rate;
+  return m;
+}
+
+// ==================== 全局状态 ====================
+
+let S = null;
+let disguise = false;
+let activeContact = 'system';
+let tickTimer = null;
+
+// ==================== UI 渲染 ====================
+
+const $ = (id) => document.getElementById(id);
+
+function renderAll() {
+  renderSidebar();
+  renderMessages();
+  renderTitlebar();
+  renderProgress();
+  renderSidebarFooter();
+  renderActions();
+}
+
+function renderTitlebar() {
+  $('tb-name').textContent = disguise ? '项目组-李工' : '修仙系统';
+  $('tb-ctrl').textContent = disguise ?
+    (S.realm>0 ? `灵力 ${S.lingli.toLocaleString()}` : '—') :
+    REALM_NAMES[S.realm];
+  document.title = disguise ? '微信' : '微信 - 修仙系统';
+}
+
+function renderSidebar() {
+  const list = $('contact-list');
+  let html = '';
+  for (const c of CONTACTS) {
+    const unlocked = S.realm >= c.unlock;
+    const unread = getUnreadCount(c.id);
+    const active = activeContact === c.id ? ' active' : '';
+    html += `<div class="sb-contact${active}" data-contact="${c.id}">
+      <div class="sc-avatar" style="font-size:18px;">${unlocked ? c.icon : '🔒'}</div>
+      <div class="sc-info">
+        <div class="sc-name">${c.name}${!unlocked ? ' (未解锁)' : ''}</div>
+        <div class="sc-preview">${getPreview(c.id)}</div>
+      </div>
+      ${unread > 0 ? `<div class="sc-badge">${unread}</div>` : ''}
+    </div>`;
+  }
+  list.innerHTML = html;
+}
+
+function getPreview(contactId) {
+  if (disguise) {
+    const fakes = { system:'[新消息]', assistant:'[新消息]', alchemy:'[新消息]', forge:'[新消息]' };
+    return fakes[contactId] || '';
+  }
+  const pres = {
+    system:  S.realm>0 ? `境界:${REALM_NAMES[S.realm]}` : '点击开始修炼',
+    assistant: `灵力:${S.lingli.toLocaleString()} | ${getRate()}/s`,
+    divination: S.divinationBuff && Date.now() < S.divinationBuff.endTs ? `今日:${S.divinationBuff.label} ${S.divinationBuff.stars}` : '点击占卜',
+    alchemy:  S.crafting ? `炼制中:${S.crafting.name}` : (S.pillInv.juling||0)+(S.pillInv.jiasu||0)+(S.pillInv.tupo||0)+'颗丹药',
+    forge:    S.equippedTreasure ? `已装备:${TREASURES.find(t=>t.id===S.equippedTreasure).name}` : '无装备',
+  };
+  return pres[contactId] || '';
+}
+
+function getUnreadCount(contactId) {
+  if (disguise) return 0;
+  if (contactId === 'system' && S.realm >= 1 && S.lingli >= BREAKTHROUGH[Math.min(S.realm, BREAKTHROUGH.length-1)].cost) return 1;
+  if (contactId === 'alchemy' && !S.crafting && S.realm >= 3) return 0;
+  return 0;
+}
+
+function renderSidebarFooter() {
+  const offlineEff = Math.floor((OFFLINE_RATE + S.offlineBonus + (S.equippedTreasure==='headphone'?0.10:0)) * 100);
+  const capH = Math.floor((OFFLINE_CAP + (S.equippedTreasure==='chair'?14400:0)) / 3600);
+  $('ft-online').textContent = `离线:${offlineEff}% | 上限:${capH}h`;
+  $('ft-ver').textContent = `修炼 v1.0 · ${S.breakCount}次突破`;
+}
+
+let _renderState = {logLen:0, contact:'', disguise:false};
+
+function renderMessages() {
+  const container = $('messages');
+  if (disguise) {
+    _renderState.disguise = true; _renderState.logLen = 0; _renderState.contact = '';
+    container.innerHTML = renderFakeChat();
+    container.scrollTop = container.scrollHeight;
+    return;
+  }
+
+  // 面板模式下全量重建（含面板专用内容，避免 tick 刷新时被洗掉）
+  const isPanel = activeContact === 'alchemy' || activeContact === 'forge' || activeContact === 'divination';
+  if (isPanel || _renderState.contact !== activeContact || _renderState.disguise || S.log.length === 0) {
+    _renderState.disguise = false; _renderState.contact = activeContact;
+    _renderState.logLen = S.log.length;
+    container.innerHTML = buildFullChat();
+    // 面板专用内容在此渲染，不再由 renderActions() 追加（防抖 + 防重复）
+    if (activeContact === 'divination') renderDivinationPanel();
+    else if (activeContact === 'alchemy' && S.realm >= 3) renderAlchemyPanel();
+    else if (activeContact === 'forge' && S.realm >= 4) renderTreasurePanel();
+    container.scrollTop = container.scrollHeight;
+    return;
+  }
+
+  // 增量：只追加新日志
+  const newEntries = S.log.slice(_renderState.logLen);
+  if (newEntries.length > 0) {
+    let frag = '';
+    for (const entry of newEntries) {
+      if (entry.type === 'card') frag += buildCard(entry.from, entry.title, entry.rows);
+      else if (entry.type === 'system') frag += buildSystemMsg(entry.text);
+      else frag += buildMsg(entry.from, entry.text, entry.type);
+    }
+    // 移除旧炼制提示
+    const oldCraft = container.querySelector('.craft-msg');
+    if (oldCraft) oldCraft.remove();
+    // 追加新炼制提示
+    if (S.crafting) {
+      const remaining = Math.max(0, Math.floor((S.crafting.end - Date.now()) / 1000));
+      frag += buildMsg('炼丹炉', `🔥 炼制中：${S.crafting.name}（剩余 ${remaining} 秒）`, 'highlight craft-msg');
+    }
+    container.insertAdjacentHTML('beforeend', frag);
+    _renderState.logLen = S.log.length;
+  }
+  // 滚动
+  const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 60;
+  if (atBottom) container.scrollTop = container.scrollHeight;
+}
+
+function buildFullChat() {
+  let html = '';
+  if (S.log.length === 0) {
+    html += buildSystemMsg('欢迎来到《打工人的修仙之路》');
+    html += buildMsg('修炼助手', '你在工位上醒来，感到体内有一股微弱的气流…');
+    html += buildMsg('修炼助手', '在输入框中打出修炼词，积累灵力后突破至炼气期。');
+    html += buildMsg('系统通知', '💡 按 Esc 切换伪装界面 | 点击左侧「每日占卜」获取运势buff', 'dim');
+  }
+  if (S._offlineLingli && S._offlineLingli > 0) {
+    const hrs = Math.floor(S._offlineSec / 3600);
+    const mins = Math.floor((S._offlineSec % 3600) / 60);
+    html += buildCard('系统通知', '🏔️ 闭关归来 · 修炼总结', [
+      `闭关时间：${hrs}小时${mins}分钟`,
+      `灵力增长：+${S._offlineLingli.toLocaleString()}`,
+    ]);
+  }
+  for (const entry of S.log) {
+    if (entry.type === 'card') html += buildCard(entry.from, entry.title, entry.rows);
+    else if (entry.type === 'system') html += buildSystemMsg(entry.text);
+    else html += buildMsg(entry.from, entry.text, entry.type);
+  }
+  if (S.crafting) {
+    const remaining = Math.max(0, Math.floor((S.crafting.end - Date.now()) / 1000));
+    html += buildMsg('炼丹炉', `🔥 炼制中：${S.crafting.name}（剩余 ${remaining} 秒）`, 'highlight craft-msg');
+  }
+  return html || buildMsg('修炼助手', '点击下方输入框开始修炼…');
+}
+
+function renderFakeChat() {
+  let html = '';
+  const ts = ['09:42','09:45','10:03','10:15','10:28','10:30','10:31','10:45','11:02','11:12','11:15','11:18'];
+  for (let i = 0; i < 6; i++) {
+    const c = FAKE_CHATS[Math.floor(Math.random() * FAKE_CHATS.length)];
+    const isMe = c.from === '你';
+    const time = ts[Math.floor(Math.random() * ts.length)];
+    html += isMe
+      ? `<div class="msg msg-to"><div class="bubble">${esc(c.text)}</div></div>`
+      : `<div class="msg msg-from"><div class="bubble"><div class="bubble-title">${esc(c.from)}</div>${esc(c.text)}</div></div>`;
+  }
+  html += `<div class="msg msg-system">${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</div>`;
+  return html;
+}
+
+function buildMsg(from, text, cls) {
+  const clsStr = cls ? ` bubble-${cls}` : '';
+  return `<div class="msg msg-from"><div class="bubble${clsStr}"><div class="bubble-title">${esc(from)}</div><div class="bubble-body">${text}</div></div></div>`;
+}
+
+function buildSystemMsg(text) {
+  return `<div class="msg msg-system">${text}</div>`;
+}
+
+function buildCard(from, title, rows) {
+  let body = `<div class="bubble-card"><div class="card-title">${title}</div>`;
+  for (const r of rows) {
+    body += `<div class="card-row">${r}</div>`;
+  }
+  body += '</div>';
+  return `<div class="msg msg-from"><div class="bubble"><div class="bubble-title">${esc(from)}</div></div><div class="msg msg-from"><div class="bubble">${body}</div></div>`;
+}
+
+function renderActions() {
+  const bar = $('action-bar');
+  let html = '';
+
+  // 打字修炼提示
+  if (!typeState.phrase) pickPhrase();
+  const comboStr = typeState.combo > 1 ? ` 🔥连击×${typeState.combo}` : '';
+  const base = typeState.phrase ? typeState.phrase.length * (S.realm + 1) * 2 : 0;
+  const reward = Math.floor(base * getBuffMultiplier());
+  html += `<span class="action-chip" style="cursor:default;background:transparent;color:#999;font-size:11px;">⌨️ 修炼词 +${reward}灵力${comboStr}</span>`;
+
+  // 突破按钮
+  if (S.realm < BREAKTHROUGH.length) {
+    const cfg = BREAKTHROUGH[S.realm];
+    const enough = S.lingli >= cfg.cost;
+    html += `<button class="action-chip${enough?'':' disabled'}" id="act-breakthrough"${enough?'':' disabled'}>⚡ 突破 (${cfg.cost})</button>`;
+  }
+
+  // 炼丹（金丹解锁）
+  if (S.realm >= 3) {
+    html += '<button class="action-chip" id="act-alchemy">💊 炼丹</button>';
+  }
+
+  // 法宝（元婴解锁）
+  if (S.realm >= 4) {
+    html += '<button class="action-chip" id="act-treasures">⚔️ 法宝</button>';
+  }
+
+  bar.innerHTML = html;
+
+  // 绑定事件
+  const bb = $('act-breakthrough');
+  if (bb) bb.addEventListener('click', () => {
+    if (S.realm >= BREAKTHROUGH.length) { addLog('系统通知','已是当前版本最高境界','fail'); renderAll(); return; }
+    if (S.lingli < BREAKTHROUGH[S.realm].cost) { addLog('系统通知','灵力不足','fail'); renderAll(); return; }
+    startRhythmBreakthrough();
+  });
+  const ab = $('act-alchemy');
+  if (ab) ab.addEventListener('click', () => { activeContact = 'alchemy'; renderAll(); });
+  const tb = $('act-treasures');
+  if (tb) tb.addEventListener('click', () => { activeContact = 'forge'; renderAll(); });
+
+}
+
+function renderProgress() {
+  const bar = $('bt-progress');
+  if (!bar) return;
+  if (S.realm >= BREAKTHROUGH.length) {
+    // 已满级
+    bar.className = 'bt-progress visible ready';
+    bar.innerHTML = '<span class="bt-text">🏆 已达当前版本最高境界</span>';
+    bar.onclick = null;
+    return;
+  }
+  const cfg = BREAKTHROUGH[S.realm];
+  const pct = Math.min(100, Math.max(0, Math.floor(S.lingli / cfg.cost * 100)));
+  const enough = S.lingli >= cfg.cost;
+  bar.className = 'bt-progress visible' + (enough ? ' ready' : '');
+  bar.innerHTML = `<div class="bt-fill" style="width:${pct}%"></div>
+    <span class="bt-text">⚡ ${REALM_NAMES[S.realm]} → ${REALM_NAMES[S.realm+1]} · ${S.lingli}/${cfg.cost}灵力</span>`;
+  bar.onclick = enough ? () => { startRhythmBreakthrough(); } : null;
+  bar.title = enough ? '⚡ 点击突破！' : '';
+}
+
+function renderDivinationPanel() {
+  const container = $('messages');
+  const today = new Date();
+  const todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  const alreadyDone = S.divinationDate === todayStr && S.divinationBuff && Date.now() < S.divinationBuff.endTs;
+  let html = container.innerHTML;
+
+  if (alreadyDone) {
+    // 显示今日占卜结果
+    const b = S.divinationBuff;
+    html += buildMsg('占卜', `今日卦象已出：`, '');
+    html += `<div class="msg msg-from"><div class="bubble" style="text-align:center;padding:12px 16px;">
+      <div style="font-size:32px;margin-bottom:4px;">${b.hexSym}</div>
+      <div style="font-size:16px;font-weight:500;">${b.hexFullName}</div>
+      <div style="font-size:14px;color:${b.rate>=0?'#07c160':'#fa5151'};margin:6px 0;">${b.label} ${b.stars}</div>
+      <div style="font-size:12px;color:#999;">${b.hexDesc}</div>
+      <div style="font-size:12px;color:#07c160;margin-top:4px;">⚡ ${b.desc}</div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">剩余：${Math.floor((b.endTs-Date.now())/60000)}分钟</div>
+    </div></div>`;
+  } else {
+    // 尚未占卜
+    html += buildMsg('占卜', '🔮 每日一次，梅花易数起卦。卦象吉凶将影响今日修炼运势。', 'dim');
+    if (S.divinationDate === todayStr && (!S.divinationBuff || Date.now() >= S.divinationBuff.endTs)) {
+      html += buildMsg('占卜', '今日卦象已过期。请明日再来。', 'dim');
+    } else {
+      html += `<div class="msg msg-from"><div class="bubble" style="text-align:center;">
+        <button class="bubble-btn accent" id="btn-divinate" style="font-size:14px;padding:8px 20px;">🔮 开始占卜</button>
+      </div></div>`;
+    }
+  }
+
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+
+  // 绑定占卜按钮
+  const btn = document.getElementById('btn-divinate');
+  if (btn) btn.addEventListener('click', () => {
+    const result = dailyDivination();
+    S.divinationDate = result.date;
+    S.divinationBuff = {
+      rate: result.buff.rate,
+      dur: result.buff.dur,
+      endTs: Date.now() + result.buff.dur * 1000,
+      label: result.buff.label,
+      stars: result.buff.stars,
+      desc: result.buff.desc,
+      hexSym: result.hex.s,
+      hexFullName: result.hex.f,
+      hexDesc: result.hex.d,
+      level: result.hex.l,
+    };
+    addLog('系统通知', `🔮 今日卦象：${result.hex.s} ${result.hex.f} — ${result.buff.label} ${result.buff.stars} | ${result.buff.desc}`, 'highlight');
+    if (result.buff.rate < 0) {
+      addLog('炼丹炉', `凶卦补偿：炼丹产出+${result.hex.l<=2?40:20}%（卦象持续期间）`, 'highlight');
+    }
+    save();
+    renderAll();
+  });
+}
+
+function renderAlchemyPanel() {
+  // 在消息区底部插入炼丹消息
+  const container = $('messages');
+  let html = container.innerHTML;
+
+  // 丹药库存
+  let invHtml = '<div style="font-size:12px;color:#999;margin-bottom:4px;">库存：';
+  const parts = [];
+  for (const p of PILLS) {
+    const count = S.pillInv[p.id] || 0;
+    parts.push(`${p.icon}${p.name}×${count}`);
+  }
+  invHtml += parts.join(' | ') || '无丹药';
+  invHtml += '</div>';
+
+  // 丹方列表
+  let recipesHtml = '';
+  for (const p of PILLS) {
+    recipesHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+      <div><span style="font-size:14px;">${p.icon} ${p.name}</span> <span style="font-size:12px;color:#999;">${p.desc}</span></div>
+      <div style="display:flex;gap:4px;">`;
+
+    if (S.crafting) {
+      recipesHtml += `<button class="bubble-btn" disabled>炼制中</button>`;
+    } else {
+      recipesHtml += `<button class="bubble-btn craft-btn" data-recipe="${p.id}">炼制(${p.cost})</button>`;
+    }
+
+    if ((S.pillInv[p.id] || 0) > 0) {
+      recipesHtml += `<button class="bubble-btn use-btn" data-recipe="${p.id}">使用</button>`;
+    }
+    recipesHtml += '</div></div>';
+  }
+
+  html += buildMsg('炼丹炉', invHtml + recipesHtml, '');
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+
+  // 委托事件
+  container.querySelectorAll('.craft-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const r = startCraft(b.dataset.recipe);
+      addLog('炼丹炉', r.ok ? `🔥 开始炼制 ${r.name}（${r.sec}秒后完成）` : r.msg, r.ok?'highlight':'fail');
+      renderAll();
+    });
+  });
+  container.querySelectorAll('.use-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const r = usePill(b.dataset.recipe);
+      addLog('炼丹炉', r.msg, r.ok?'success':'fail');
+      renderAll();
+    });
+  });
+}
+
+function renderTreasurePanel() {
+  const container = $('messages');
+  let html = container.innerHTML;
+
+  let eqStr = '无';
+  if (S.equippedTreasure) {
+    const eq = TREASURES.find(t=>t.id===S.equippedTreasure);
+    eqStr = `${eq.icon} ${eq.name}`;
+  }
+  let body = `<div style="font-size:12px;color:#999;margin-bottom:4px;">当前装备：${eqStr}</div>`;
+
+  for (const t of TREASURES) {
+    const owned = S.ownedTreasures.includes(t.id);
+    const equipped = S.equippedTreasure === t.id;
+    body += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+      <div><span style="font-size:14px;">${t.icon} ${t.name}</span> <span style="font-size:12px;color:#999;">${t.desc}</span> ${equipped?'✅':''}</div>`;
+    if (!owned) {
+      body += `<button class="bubble-btn buy-btn" data-tid="${t.id}">购买(${t.cost.toLocaleString()})</button>`;
+    } else if (!equipped) {
+      body += `<button class="bubble-btn equip-btn" data-tid="${t.id}">装备</button>`;
+    } else {
+      body += `<button class="bubble-btn unequip-btn">卸下</button>`;
+    }
+    body += '</div>';
+  }
+
+  html += buildMsg('法宝阁', body, '');
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+
+  container.querySelectorAll('.buy-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const r = buyTreasure(b.dataset.tid);
+      addLog('法宝阁', r.ok ? `⚔️ 获得法宝：${r.treasure.name}！` : (r.msg||'购买失败'), r.ok?'success':'fail');
+      renderAll();
+    });
+  });
+  container.querySelectorAll('.equip-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const r = equipTreasure(b.dataset.tid);
+      if (r.ok) addLog('法宝阁', `装备法宝：${r.treasure.name}`, 'success');
+      renderAll();
+    });
+  });
+  container.querySelectorAll('.unequip-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      S.equippedTreasure = null;
+      addLog('法宝阁', '卸下法宝', 'dim');
+      renderAll();
+    });
+  });
+}
+
+// ==================== 随机事件 ====================
+
+const RANDOM_EVENTS = [
+  { text:'同事请你喝咖啡 ☕', effect:'修炼速度+30%，持续60秒', type:'boost', rateMult:1.3, dur:60 },
+  { text:'老板去开会了！', effect:'灵力爆发 +30', type:'burst', amount:30 },
+  { text:'茶水间飘来咖啡香', effect:'灵力 +15', type:'burst', amount:15 },
+  { text:'午休时分，办公室格外安静', effect:'修炼速度+20%，持续90秒', type:'boost', rateMult:1.2, dur:90 },
+  { text:'打印机卡住了，大家忙着修理', effect:'灵力 +25', type:'burst', amount:25 },
+  { text:'隔壁同事的机械键盘传来灵气共鸣', effect:'修炼速度+40%，持续45秒', type:'boost', rateMult:1.4, dur:45 },
+];
+
+let eventTimer = 0;
+let activeEvent = null; // { endTs, rateMult }
+let rhythmState = null; // { active, dotPos, direction, speed }
+
+function triggerRandomEvent() {
+  if (S.realm < 1) return null;
+  const evt = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
+  if (evt.type === 'burst') {
+    const bonus = Math.floor(evt.amount * (1 + S.realm * 0.5));
+    S.lingli += bonus;
+    addLog('系统通知', `${evt.text} → ${evt.effect}（实际+${bonus}）`, 'highlight');
+    return { type:'burst' };
+  } else if (evt.type === 'boost') {
+    activeEvent = { endTs: Date.now() + evt.dur * 1000, rateMult: evt.rateMult };
+    addLog('系统通知', `${evt.text} → ${evt.effect}`, 'highlight');
+    return { type:'boost' };
+  }
+  return null;
+}
+
+// ==================== 打字修炼 ====================
+
+const CULTIVATION_PHRASES = [
+  // realm 0: 凡人（20词）
+  ['运转周天','凝神静气','灵气汇聚','入门修炼','气沉丹田','打通经脉',
+   '吐纳调息','静坐冥想','引气入体','炼精化气','养气存神','真气流转',
+   '调息养神','存思守一','筑基培元','丹田蓄气','经脉初通','灵气感知',
+   '心静如水','抱元守一'],
+  // realm 1: 炼气（20词）
+  ['筑基修炼','灵力运转','周天圆满','炼气化神','灵气逼人','丹田发热',
+   '真气涌动','百脉贯通','灵气如泉','御气飞行','气贯长虹','紫气东来',
+   '灵气化液','丹田如炉','经脉扩张','神与气合','气冲霄汉','炼气成罡',
+   '真气化形','灵光闪现'],
+  // realm 2: 筑基（20词）
+  ['金丹大道','凝气成丹','三花聚顶','筑基圆满','灵力如潮','道心初成',
+   '五气归元','凝丹结胎','炉火纯青','真元凝聚','丹光内敛','神气交融',
+   '大道之门','灵台清明','金丹初成','龙虎交媾','坎离相交','铅汞调和',
+   '性命双修','阴阳和合'],
+  // realm 3: 金丹（20词）
+  ['元婴初现','五气朝元','金丹大成','天人交感','御剑飞行','元神出窍',
+   '丹破婴生','金液还丹','九转功成','紫府元婴','天地共鸣','法相初显',
+   '金丹九转','灵婴坐照','神游太虚','剑意通玄','法则感悟','虚空凝剑',
+   '丹霞满天','乘风御剑'],
+  // realm 4: 元婴（20词）
+  ['化神之路','破碎虚空','天人合一','万法归宗','大道至简','羽化登仙',
+   '元神大成','虚空造物','法则圆满','以身合道','斩却三尸','超脱轮回',
+   '洪荒之力','开天辟地','混沌初开','大道共鸣','万劫不灭','演化天地',
+   '一念通天','返虚入浑'],
+];
+
+let typeState = { phrase:'', combo:0, lastPhrase:'' };
+let isComposing = false;
+
+function pickPhrase() {
+  const pool = CULTIVATION_PHRASES[Math.min(S.realm, CULTIVATION_PHRASES.length - 1)];
+  // 避免与上一词重复（池子≥2时）
+  let phrase;
+  do {
+    phrase = pool[Math.floor(Math.random() * pool.length)];
+  } while (phrase === typeState.lastPhrase && pool.length > 1);
+  typeState.phrase = phrase;
+  typeState.lastPhrase = phrase;
+  typeState.combo = 0;
+  const input = $('chat-input');
+  if (input) input.placeholder = '修炼：' + typeState.phrase;
+}
+
+function handleCultivationInput() {
+  const input = $('chat-input');
+  if (!input || disguise || !typeState.phrase) return;
+  if (isComposing) return; // 输入法组合中，跳过校验
+  const val = input.value;
+  if (!val) return;
+
+  // 找出最长匹配前缀
+  let matchLen = 0;
+  for (let i = 0; i < val.length && i < typeState.phrase.length; i++) {
+    if (val[i] === typeState.phrase[i]) {
+      matchLen++;
+    } else {
+      break;
+    }
+  }
+
+  // 完全没匹配 → 红色闪烁 + 清空
+  if (matchLen === 0) {
+    input.style.background = '#ffe0e0';
+    setTimeout(() => { input.style.background = ''; input.value = ''; }, 200);
+    return;
+  }
+
+  // 首字就错或中途打错 → 保留已对的字，只清除错字
+  if (matchLen < val.length) {
+    input.style.background = '#ffe0e0';
+    input.value = typeState.phrase.substring(0, matchLen);
+    setTimeout(() => { input.style.background = ''; }, 200);
+    return;
+  }
+
+  // 完全匹配！
+  if (val === typeState.phrase) {
+    const base = typeState.phrase.length * (S.realm + 1) * 2;
+    const bonus = Math.floor(base * getBuffMultiplier());
+    S.lingli += bonus;
+    typeState.combo++;
+    const comboText = typeState.combo > 1 ? ` 🔥连击×${typeState.combo}！` : '';
+    addLog('修炼助手', `✅ ${typeState.phrase} → 灵力 +${bonus}${comboText}`, 'success');
+    input.style.background = '#e0ffe0';
+    setTimeout(() => { input.style.background = ''; }, 200);
+    input.value = '';
+    pickPhrase();
+    renderTitlebar();
+    if (activeContact === 'assistant' || activeContact === 'system') renderMessages();
+  }
+}
+
+// ==================== 节奏突破（渡劫） ====================
+
+function startRhythmBreakthrough() {
+  if (rhythmState && rhythmState.active) return; // 防重入
+  // 境界越高 → 绿色区越窄 + 光点越快
+  const zone = [0.25, 0.30, 0.335, 0.37][S.realm] || 0.33;
+  const speed = [0.008, 0.012, 0.017, 0.024][S.realm] || 0.012;
+  rhythmState = { active:true, dotPos:0, direction:1, speed, greenLo:zone, greenHi:1-zone, rafId:null };
+  $('rhythm-overlay').classList.add('active');
+  $('rhythm-result').textContent = '';
+  $('rhythm-result').className = '';
+  rhythmState.rafId = requestAnimationFrame(rhythmLoop);
+  // 5秒超时自动完成
+  setTimeout(() => {
+    if (rhythmState && rhythmState.active) finishRhythmBreakthrough();
+  }, 5000);
+}
+
+function rhythmLoop() {
+  if (!rhythmState || !rhythmState.active) return;
+  rhythmState.dotPos += rhythmState.direction * rhythmState.speed;
+  if (rhythmState.dotPos >= 1) { rhythmState.dotPos = 1; rhythmState.direction = -1; }
+  if (rhythmState.dotPos <= 0) { rhythmState.dotPos = 0; rhythmState.direction = 1; }
+  renderRhythm();
+  rhythmState.rafId = requestAnimationFrame(rhythmLoop);
+}
+
+function finishRhythmBreakthrough() {
+  if (!rhythmState || !rhythmState.active) return;
+  const pos = rhythmState.dotPos;
+  const inGreen = pos > rhythmState.greenLo && pos < rhythmState.greenHi;
+  rhythmState.active = false;
+  if (rhythmState.rafId) { cancelAnimationFrame(rhythmState.rafId); rhythmState.rafId = null; }
+  const bonus = inGreen ? 0.30 : 0;
+  // 显示结果
+  if (inGreen) {
+    $('rhythm-result').textContent = '✅ 灵气截断成功！突破率 +30%';
+    $('rhythm-result').className = 'success';
+  } else {
+    $('rhythm-result').textContent = '未能截住灵气…正常概率突破';
+    $('rhythm-result').className = 'miss';
+  }
+  // 延迟关闭 overlay + 执行突破
+  setTimeout(() => {
+    $('rhythm-overlay').classList.remove('active');
+    rhythmState = null;
+    executeBreakthrough(bonus);
+  }, 800);
+}
+
+function executeBreakthrough(rhythmBonus) {
+  if (S.realm >= BREAKTHROUGH.length) {
+    addLog('系统通知', '已是当前版本最高境界', 'fail');
+    return;
+  }
+  const cfg = BREAKTHROUGH[S.realm];
+  if (S.lingli < cfg.cost) {
+    addLog('系统通知', `灵力不足！需要 ${cfg.cost}，当前 ${S.lingli}`, 'fail');
+    return;
+  }
+  S.lingli -= cfg.cost; S.pity++;
+  let prob = cfg.prob;
+  if (S.pity >= PITY_MAX + 1) prob = 1;
+  if (S.breakthroughBoost > 0) { prob = Math.min(1, prob + 0.2); S.breakthroughBoost = 0; }
+  prob = Math.min(1, prob + rhythmBonus);
+
+  if (Math.random() < prob) {
+    S.realm++; S.pity = 0; S.breakCount++;
+    const rn = REALM_NAMES[S.realm], rate = REALM_RATES[S.realm];
+    addLog('系统通知', `⚡ 天劫渡过！突破至【${rn}】！灵力产出提升至 ${rate}/秒${rhythmBonus>0?' (卡点加成+30%)':''}`, 'success');
+    if (S.realm === 3) addLog('系统通知', '🔓 解锁：炼丹炉', 'highlight');
+    if (S.realm === 4) addLog('系统通知', '🔓 解锁：法宝阁', 'highlight');
+  } else {
+    const refund = Math.floor(cfg.cost * FAIL_REFUND);
+    S.lingli += refund;
+    addLog('系统通知', `❌ 突破失败…瓶颈松动（连续${S.pity}次）。灵力回流：+${refund.toLocaleString()}`, 'fail');
+  }
+  renderAll();
+}
+
+// ==================== 游戏主循环 ====================
+
+function tick() {
+  if (!S || disguise) return;
+
+  // 节奏突破中 → 暂停修炼
+  if (rhythmState && rhythmState.active) return;
+
+  // 凡人阶段被动增长（0.5/秒）
+  if (S.realm === 0) {
+    S.lingli += 0.5;
+    S.totalSec++;
+    if (S.lingli >= 100 && S.lingli - 0.5 < 100) {
+      addLog('系统通知', '灵力已满100！可以尝试突破了 ⚡', 'highlight');
+    }
+  }
+
+  // 清除过期丹药
+  if (S.activePills.juling && Date.now() >= S.activePills.juling) {
+    delete S.activePills.juling;
+    addLog('炼丹炉', '聚灵丹效果已消退…', 'dim');
+  }
+
+  // 清除过期随机事件
+  if (activeEvent && Date.now() >= activeEvent.endTs) {
+    addLog('系统通知', '灵气波动平复，修炼速度恢复正常', 'dim');
+    activeEvent = null;
+  }
+
+  // 清除过期占卜buff
+  if (S.divinationBuff && Date.now() >= S.divinationBuff.endTs) {
+    addLog('系统通知', '今日卦象时效已过，修炼速度恢复。明日可再次占卜', 'dim');
+    S.divinationBuff = null;
+  }
+
+  // 自动修炼
+  if (S.realm >= 1) {
+    let rate = getRate();
+    if (activeEvent) rate = Math.floor(rate * activeEvent.rateMult);
+    S.lingli += rate;
+    S.totalSec++;
+  }
+
+  // 检查炼丹完成
+  const craft = checkCraft();
+  if (craft) addLog('炼丹炉', `💊 丹炉开启！获得 ${craft.name} ×1`, 'success');
+
+  // 自动日志
+  autoFlavor();
+
+  // 随机事件（每45-120秒）
+  if (S.realm >= 1) {
+    eventTimer++;
+    const interval = 45 + Math.floor(Math.random() * 75);
+    if (eventTimer >= interval) {
+      triggerRandomEvent();
+      eventTimer = 0;
+    }
+  }
+
+  // 自动保存（每30秒）
+  if (Math.floor(Date.now() / 1000) % 30 === 0) save();
+
+  // 刷UI
+  if (activeContact === 'system' || activeContact === 'assistant' || activeContact === 'divination') renderMessages();
+  renderTitlebar();
+  renderProgress();
+  renderActions();
+  renderSidebarFooter();
+}
+
+// ==================== 初始化和事件 ====================
+
+function resetSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+  location.reload();
+}
+
+function init() {
+  const saved = load();
+  if (saved) {
+    S = saved;
+  } else {
+    S = createState();
+    S.lastOnline = Date.now();
+  }
+  S._offlineLingli = 0; S._offlineSec = 0;
+
+  if (saved) {
+    const offline = calcOffline();
+    S.lingli += offline.lingli;
+    S.lastOnline = Date.now();
+    S._offlineLingli = offline.lingli;
+    S._offlineSec = offline.sec;
+
+    if (S.crafting && Date.now() >= S.crafting.end) {
+      S.pillInv[S.crafting.id] = (S.pillInv[S.crafting.id]||0) + 1;
+      S.crafting = null;
+    }
+    if (S.activePills.juling && Date.now() >= S.activePills.juling) delete S.activePills.juling;
+
+    addLog('系统通知', '欢迎回来！', 'highlight');
+    if (offline.lingli > 0) {
+      showOfflineModal(offline.lingli, offline.sec);
+    }
+  }
+
+  renderAll();
+  save();
+  tickTimer = setInterval(tick, 1000);
+
+  // ==== 事件绑定 ====
+
+  // 标题栏切换伪装
+  $('tb-name').addEventListener('click', toggleDisguise);
+
+  // 联系人点击
+  $('contact-list').addEventListener('click', (e) => {
+    const el = e.target.closest('.sb-contact');
+    if (!el) return;
+    activeContact = el.dataset.contact;
+    renderAll();
+  });
+
+  // 离线弹窗关闭
+  $('modal-close').addEventListener('click', () => {
+    $('modal-overlay').classList.remove('show');
+    S._offlineLingli = 0;
+    renderAll();
+  });
+
+  // 键盘快捷键
+  document.addEventListener('keydown', (e) => {
+    // 节奏突破中：拦截 Esc 和 Ctrl+Shift+H，空格=截断灵气
+    if (rhythmState && rhythmState.active) {
+      if (e.key === 'Escape' || (e.ctrlKey && e.shiftKey && e.key === 'H')) {
+        e.preventDefault(); return; // 渡劫中禁止切伪装
+      }
+      if (e.key === ' ' && document.activeElement !== $('chat-input')) {
+        e.preventDefault();
+        finishRhythmBreakthrough();
+        return;
+      }
+      return; // 渡劫中拦截所有其他按键
+    }
+
+    if (e.key === 'Escape') { e.preventDefault(); toggleDisguise(); return; }
+    if (e.ctrlKey && e.shiftKey && e.key === 'H') { e.preventDefault(); bossKey(); return; }
+  });
+
+  // 输入框打字修炼
+  $('chat-input').addEventListener('input', handleCultivationInput);
+  // 输入法组合事件：组合中跳过打字校验，避免拼音触发误判
+  $('chat-input').addEventListener('compositionstart', () => { isComposing = true; });
+  $('chat-input').addEventListener('compositionend', () => { isComposing = false; });
+
+  // 输入框回车=发送（阻止换行，在伪装模式下无意义，游戏模式下触发打字检查）
+  $('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleCultivationInput(); }
+  });
+}
+
+function toggleDisguise() {
+  disguise = !disguise;
+  renderAll();
+}
+
+function bossKey() {
+  disguise = true;
+  document.title = '微信';
+  renderAll();
+}
+
+function showOfflineModal(lingli, sec) {
+  const hrs = Math.floor(sec / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  $('modal-body').innerHTML = `
+    闭关时间：<span class="val">${hrs}小时${mins}分钟</span>
+    灵力增长：<span class="val">+${lingli.toLocaleString()}</span>
+  `;
+  $('modal-overlay').classList.add('show');
+}
+
+function renderRhythm() {
+  if (!rhythmState || !rhythmState.active) {
+    $('rhythm-overlay').classList.remove('active');
+    return;
+  }
+  const bar = $('rhythm-bar');
+  const dot = $('rhythm-dot');
+  const zone = $('rhythm-zone');
+  if (!bar || !dot || !zone) return;
+  $('rhythm-overlay').classList.add('active');
+  dot.style.left = (rhythmState.dotPos * (bar.clientWidth - 12)) + 'px';
+  zone.style.left = (rhythmState.greenLo * 100) + '%';
+  zone.style.right = ((1 - rhythmState.greenHi) * 100) + '%';
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ==================== 启动（带崩溃保护） ====================
+
+document.addEventListener('DOMContentLoaded', function() {
+  try { init(); } catch(e) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;text-align:center;"><div><h2 style="color:#e74c3c;">⚠️ 游戏加载失败</h2><pre style="color:#666;max-width:600px;margin:12px auto;text-align:left;font-size:13px;">'+esc(String(e.stack||e.message||e))+'</pre><button onclick="resetSave()" style="padding:10px 24px;font-size:15px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;">🗑️ 重置存档并重试</button><p style="color:#999;font-size:12px;margin-top:8px;">如仍失败，清除浏览器 localStorage 后刷新</p></div></div>';
+    throw e;
+  }
+});
+</script>
+</body>
+</html>
