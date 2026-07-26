@@ -303,11 +303,26 @@ html, body {
   background: #07c160; position: absolute; top: -2px;
   transition: none;
 }
-#rhythm-zone {
+#rhythm-zone-r {
   position: absolute; top: 0; height: 100%;
-  background: rgba(7,193,96,0.2);
-  left: 33%; right: 33%;
+  background: rgba(250,81,81,0.35);
+  left: 0; right: 60%;
 }
+#rhythm-zone-y {
+  position: absolute; top: 0; height: 100%;
+  background: rgba(250,200,50,0.30);
+  left: 20%; right: 40%;
+}
+#rhythm-zone-g {
+  position: absolute; top: 0; height: 100%;
+  background: rgba(7,193,96,0.25);
+  left: 40%; right: 40%;
+}
+.sb-btn {
+  background: none; border: none; color: #888; cursor: pointer;
+  font-size: 13px; padding: 2px 4px; font-family: var(--font);
+}
+.sb-btn:hover { color: #ccc; }
 #rhythm-result {
   font-size: 13px; margin-top: 12px; min-height: 20px;
 }
@@ -340,6 +355,8 @@ html, body {
       <div class="sb-footer">
         <span id="ft-online">—</span>
         <span id="ft-ver">修炼日志 v1.0</span>
+        <button class="sb-btn" id="btn-save" title="单击导出·双击导入存档">💾</button>
+        <button class="sb-btn" id="btn-newgame" title="新游戏（清空存档）">🔄</button>
       </div>
     </div>
 
@@ -375,7 +392,9 @@ html, body {
     <h3>⚡ 天劫降临</h3>
     <div class="rhythm-hint">按空格键在绿色区域截断灵气…</div>
     <div id="rhythm-bar">
-      <div id="rhythm-zone"></div>
+      <div id="rhythm-zone-r"></div>
+      <div id="rhythm-zone-y"></div>
+      <div id="rhythm-zone-g"></div>
       <div id="rhythm-dot"></div>
     </div>
     <div id="rhythm-result"></div>
@@ -390,15 +409,24 @@ html, body {
 
 // ==================== 常量 ====================
 
-const REALM_NAMES = ['凡人','炼气·实习期','筑基·转正','金丹·主管','元婴·经理'];
-const REALM_RATES = [0, 1, 3, 10, 30]; // 每境界灵力/秒
+const REALM_NAMES = ['凡人','炼气·实习期','筑基·转正','金丹·主管','元婴·经理','化神·总监'];
+const REALM_RATES = [0, 1, 3, 10, 30, 100]; // 每境界灵力/秒
 
 const BREAKTHROUGH = [
-  { cost:100,  prob:1.0 },
-  { cost:500,  prob:0.9 },
-  { cost:2000, prob:0.8 },
-  { cost:8000, prob:0.7 },
+  { cost:100,   prob:1.0 },
+  { cost:500,   prob:0.9 },
+  { cost:2000,  prob:0.8 },
+  { cost:8000,  prob:0.7 },
+  { cost:30000, prob:0.6 },
 ];
+
+// 功法选择（化神解锁）
+const METHODS = {
+  sword: { name:'太虚剑典', icon:'⚔️', desc:'修炼速度+20%·渡劫率+10%·绿区+3%', rate:0.20, breakthrough:0.10, greenBonus:3 },
+  pill:  { name:'万象丹经', icon:'💊', desc:'炼丹-30%时间·离线+15%·丹药×2', craftTime:-0.30, offline:0.15, pillDouble:true },
+};
+const QI_DEVIATE_MAX = 100; // 每境界踩红雷上限
+const QI_DEVIATE_DEBUFF = -0.30; // 走火入魔修炼速度-30%
 
 const PILLS = [
   { id:'juling', name:'聚灵丹', cost:100, craft:60,  dur:7200, desc:'修炼速度+20%持续2h', icon:'☕' },
@@ -498,6 +526,9 @@ function createState() {
     ownedTreasures:[], equippedTreasure:null,
     log:[], logTs:0,
     divinationDate:'', divinationBuff:null, // {rate,dur,endTs,level,hex...}
+    method:null, // 'sword' | 'pill' | null（化神境界解锁）
+    _redTotal:0, // 当前境界踩红雷累计
+    _qiDeviate:false, // 走火入魔状态
     createdAt:Date.now(), lastSave:Date.now(), lastOnline:Date.now(),
   };
 }
@@ -588,9 +619,10 @@ function usePill(recipeId) {
   if (!S.pillInv[recipeId] || S.pillInv[recipeId] <= 0) return {ok:false, msg:'丹药不足'};
   S.pillInv[recipeId]--;
   const r = PILLS.find(p=>p.id===recipeId);
-  if (r.id==='juling') { S.activePills.juling = Date.now() + r.dur*1000; return {ok:true, msg:'聚灵丹生效！修炼速度+20%，持续2小时'}; }
-  if (r.id==='jiasu') { S.offlineBonus = Math.min(0.2, S.offlineBonus + 0.05); return {ok:true, msg:'加速丹生效！离线效率永久+5%（上限20%）'}; }
-  if (r.id==='tupo')  { S.breakthroughBoost = 1; return {ok:true, msg:'突破丹生效！下次突破成功率+20%'}; }
+  const x2 = S.method === 'pill' ? 2 : 1; // 万象丹经：丹药效果×2
+  if (r.id==='juling') { S.activePills.juling = Date.now() + r.dur*1000; return {ok:true, msg:`聚灵丹生效！修炼速度+${20*x2}%，持续2小时${x2>1?' (万象丹经×2)':''}`}; }
+  if (r.id==='jiasu') { S.offlineBonus = Math.min(0.2, S.offlineBonus + 0.05*x2); return {ok:true, msg:`加速丹生效！离线效率永久+${5*x2}%（上限20%）${x2>1?' (万象丹经×2)':''}`}; }
+  if (r.id==='tupo')  { S.breakthroughBoost = x2; return {ok:true, msg:`突破丹生效！下次突破成功率+${20*x2}%${x2>1?' (万象丹经×2)':''}`}; }
   return {ok:false, msg:'未知丹药'};
 }
 
@@ -661,6 +693,8 @@ function getBuffMultiplier() {
   if (S.activePills.juling && Date.now() < S.activePills.juling) m += 0.2;
   if (S.equippedTreasure==='keyboard') m += 0.15;
   if (S.divinationBuff && Date.now() < S.divinationBuff.endTs) m += S.divinationBuff.rate;
+  if (S.method === 'sword') m += METHODS.sword.rate; // 太虚剑典 +20%
+  if (S._qiDeviate) m += QI_DEVIATE_DEBUFF; // 走火入魔 -30%
   return m;
 }
 
@@ -734,10 +768,12 @@ function getUnreadCount(contactId) {
 }
 
 function renderSidebarFooter() {
-  const offlineEff = Math.floor((OFFLINE_RATE + S.offlineBonus + (S.equippedTreasure==='headphone'?0.10:0)) * 100);
+  const offlineEff = Math.floor((OFFLINE_RATE + S.offlineBonus + (S.equippedTreasure==='headphone'?0.10:0) + (S.method==='pill'?METHODS.pill.offline:0)) * 100);
   const capH = Math.floor((OFFLINE_CAP + (S.equippedTreasure==='chair'?14400:0)) / 3600);
-  $('ft-online').textContent = `离线:${offlineEff}% | 上限:${capH}h`;
-  $('ft-ver').textContent = `修炼 v1.0 · ${S.breakCount}次突破`;
+  const redInfo = (S._redTotal || 0) > 0 ? ` | 红雷:${S._redTotal}/${QI_DEVIATE_MAX}` : '';
+  const qiInfo = S._qiDeviate ? ' ⚠️入魔' : '';
+  $('ft-online').textContent = `离线:${offlineEff}% | 上限:${capH}h${redInfo}${qiInfo}`;
+  $('ft-ver').textContent = `修炼 v2.2 · ${S.breakCount}次突破`;
 }
 
 let _renderState = {logLen:0, contact:'', disguise:false};
@@ -855,6 +891,14 @@ function renderActions() {
   const bar = $('action-bar');
   let html = '';
 
+  // 功法/走火入魔状态
+  if (S.method) {
+    const m = METHODS[S.method];
+    html += `<span class="action-chip" style="cursor:default;background:transparent;color:#07c160;font-size:10px;">${m.icon} ${m.name}</span>`;
+  }
+  if (S._qiDeviate) {
+    html += `<span class="action-chip" style="cursor:default;background:#fff0f0;color:#fa5151;font-size:10px;">⚠️ 走火入魔</span>`;
+  }
   // 打字修炼提示
   if (!typeState.phrase) pickPhrase();
   const comboStr = typeState.combo > 1 ? ` 🔥连击×${typeState.combo}` : '';
@@ -870,6 +914,8 @@ function renderActions() {
     const cfg = BREAKTHROUGH[S.realm];
     const enough = S.lingli >= cfg.cost;
     html += `<button class="action-chip${enough?'':' disabled'}" id="act-breakthrough"${enough?'':' disabled'}>⚡ 突破 (${cfg.cost})</button>`;
+  } else {
+    html += `<span class="action-chip" style="cursor:default;background:transparent;color:#07c160;font-size:11px;">🏆 已是最高境界</span>`;
   }
 
   // 炼丹（金丹解锁）
@@ -918,6 +964,37 @@ function renderProgress() {
     <span class="bt-text">⚡ ${REALM_NAMES[S.realm]} → ${REALM_NAMES[S.realm+1]} · ${S.lingli}/${cfg.cost}灵力</span>`;
   bar.onclick = enough ? () => { startRhythmBreakthrough(); } : null;
   bar.title = enough ? '⚡ 点击突破！' : '';
+}
+
+function showMethodSelection() {
+  const container = $('messages');
+  let html = container.innerHTML;
+  html += `<div class="msg msg-from"><div class="bubble" style="text-align:center;padding:12px 16px;">
+    <div style="font-size:15px;font-weight:500;margin-bottom:8px;">🔮 选择你的修炼之路</div>
+    <div style="font-size:12px;color:#999;margin-bottom:12px;">一旦选择，无法更改——此乃修仙根本大法</div>
+    <div style="display:flex;gap:8px;justify-content:center;">
+      <button class="bubble-btn method-btn" data-method="sword" style="flex:1;max-width:160px;">
+        <div style="font-size:20px;">⚔️</div>
+        <div style="font-size:13px;font-weight:500;">太虚剑典</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">${METHODS.sword.desc}</div>
+      </button>
+      <button class="bubble-btn method-btn" data-method="pill" style="flex:1;max-width:160px;">
+        <div style="font-size:20px;">💊</div>
+        <div style="font-size:13px;font-weight:500;">万象丹经</div>
+        <div style="font-size:10px;color:#888;margin-top:4px;">${METHODS.pill.desc}</div>
+      </button>
+    </div>
+  </div></div>`;
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+  container.querySelectorAll('.method-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      S.method = b.dataset.method;
+      const m = METHODS[S.method];
+      addLog('系统通知', `${m.icon} 已选择【${m.name}】——${m.desc}`, 'success');
+      save(); renderAll();
+    });
+  });
 }
 
 function renderDivinationPanel() {
@@ -1122,34 +1199,72 @@ function triggerRandomEvent() {
 // ==================== 打字修炼 ====================
 
 const CULTIVATION_PHRASES = [
-  // realm 0: 凡人（20词）
+  // realm 0: 凡人（50词·4字基础）
   ['运转周天','凝神静气','灵气汇聚','入门修炼','气沉丹田','打通经脉',
    '吐纳调息','静坐冥想','引气入体','炼精化气','养气存神','真气流转',
    '调息养神','存思守一','筑基培元','丹田蓄气','经脉初通','灵气感知',
-   '心静如水','抱元守一'],
-  // realm 1: 炼气（20词）
+   '心静如水','抱元守一','初窥门径','内观自省','气行周天','坐忘无我',
+   '凝神入静','返璞归真','吐故纳新','灵台澄明','真气初生','引灵入脉',
+   '根基稳固','气贯百骸','心无旁骛','抱朴守拙','澄心静虑','呼吸吐纳',
+   '灵光初现','气定神闲','内息绵绵','心若止水','精满气足','天人之始',
+   '灵根初醒','气随意转','百日筑基','潜心修炼','勤修不辍','初悟大道',
+   '灵识初开','气聚丹田'],
+  // realm 1: 炼气（50词·4字进阶）
   ['筑基修炼','灵力运转','周天圆满','炼气化神','灵气逼人','丹田发热',
    '真气涌动','百脉贯通','灵气如泉','御气飞行','气贯长虹','紫气东来',
    '灵气化液','丹田如炉','经脉扩张','神与气合','气冲霄汉','炼气成罡',
-   '真气化形','灵光闪现'],
-  // realm 2: 筑基（20词）
+   '真气化形','灵光闪现','炼气巅峰','真气凝练','灵气淬体','经脉如铁',
+   '丹田如火','气吞山河','一步登天','灵气如潮','百川归海','气宇轩昂',
+   '真元充沛','灵台清明','气息悠长','周而复始','气焰冲天','筋脉如弦',
+   '真火煅体','灵气如丝','百炼成钢','腾云驾雾','凌空而立','气贯斗牛',
+   '丹田饱满','龙吟虎啸','灵潮涌动','气吞万象','神完气足','炼气大圆满',
+   '真气外放','灵气如海'],
+  // realm 2: 筑基（50词·4字中阶）
   ['金丹大道','凝气成丹','三花聚顶','筑基圆满','灵力如潮','道心初成',
    '五气归元','凝丹结胎','炉火纯青','真元凝聚','丹光内敛','神气交融',
    '大道之门','灵台清明','金丹初成','龙虎交媾','坎离相交','铅汞调和',
-   '性命双修','阴阳和合'],
-  // realm 3: 金丹（20词）
-  ['元婴初现','五气朝元','金丹大成','天人交感','御剑飞行','元神出窍',
-   '丹破婴生','金液还丹','九转功成','紫府元婴','天地共鸣','法相初显',
-   '金丹九转','灵婴坐照','神游太虚','剑意通玄','法则感悟','虚空凝剑',
-   '丹霞满天','乘风御剑'],
-  // realm 4: 元婴（20词）
-  ['化神之路','破碎虚空','天人合一','万法归宗','大道至简','羽化登仙',
-   '元神大成','虚空造物','法则圆满','以身合道','斩却三尸','超脱轮回',
-   '洪荒之力','开天辟地','混沌初开','大道共鸣','万劫不灭','演化天地',
-   '一念通天','返虚入浑'],
+   '性命双修','阴阳和合','水火既济','虚室生白','道法自然','天地为炉',
+   '造化为工','阴阳为炭','万物为铜','金丹九炼','抱元守中','虚极静笃',
+   '玄关一窍','真意绵绵','道心坚固','真种落地','采药归炉','封炉炼丹',
+   '文武火候','子午抽添','卯酉沐浴','金丹显形','大道无形','生育天地',
+   '大道无情','运行日月','大道无名','长养万物','真息归根','神返身中',
+   '气自回元','玄牝之门'],
+  // realm 3: 金丹（50词·5字 ~10s时限）
+  ['九转金丹成','紫府元婴现','天人交感时','一剑破万法','御剑飞行术',
+   '丹破元婴生','金液还丹术','天地共鸣时','法相初显现','灵婴坐照中',
+   '神游太虚境','剑意通玄妙','法则初感悟','虚空凝剑诀','丹霞满天飞',
+   '乘风御剑去','五行朝元气','大道初显现','万法归宗始','金丹大圆满',
+   '九龙拱卫日','三昧真火炼','阴阳二气合','乾坤一掌中','日月精华聚',
+   '天地灵气汇','万象归元术','道心通明时','紫气东来日','金丹渡劫始',
+   '灵台方寸山','斜月三星洞','菩提本无树','明镜亦非台','本来无一物',
+   '何处惹尘埃','一粒金丹吞','始知我命由','不在天地间','一朝金丹成',
+   '龙虎齐聚首','五气朝元阙','三花聚顶刻','神光内敛时','金丹耀九霄',
+   '天地为鼎炉','日月为水火','阴阳为化机','乾坤一掌中','万法一念间'],
+  // realm 4: 元婴（50词·5字 ~8s时限·生僻字多）
+  ['化神之路艰','破碎虚空去','天人合一道','大道至简矣','羽化登仙时',
+   '元神大成者','虚空造物术','法则圆满境','以身合天道','斩却三尸去',
+   '超脱轮回外','洪荒之力涌','开天辟地始','混沌初开时','大衍五十数',
+   '万劫不灭身','演化天地间','一念通天彻','返虚入浑沦','道法自然成',
+   '元婴出窍游','身外化身术','遨游太虚境','瞬息千里外','袖里藏乾坤',
+   '掌中握日月','脚踏七星罡','手握五行旗','头顶三清境','足踏九幽地',
+   '元神不灭体','万法皆通明','虚空炼形术','涅槃重生法','大罗金仙境',
+   '逍遥天地间','无拘亦无束','跳出三界外','不在五行中','长生久视道',
+   '与天地同寿','与日月同辉','斡旋造化功','颠倒阴阳术','移星换斗法',
+   '回天返日术','呼风唤雨诀','震山撼地术','驾雾腾云去','入水不溺身'],
+  // realm 5: 化神（50词·5-6字 ~6s时限·极生僻）
+  ['斡旋造化矣','颠倒阴阳功','移星换斗术','回天返日诀','呼风唤雨来',
+   '震山撼地去','驾雾腾云术','降龙伏虎功','掌中握寰宇','袖里藏星辰',
+   '一脚踏八荒','一拳碎虚空','大罗金仙道','混元无极功','太上忘情诀',
+   '逍遥游太虚','无何有之乡','鸿蒙初辟时','混沌未分际','大道无形中',
+   '造化钟神秀','阴阳割昏晓','荡胸生层云','决眦入归鸟','一览众山小',
+   '扶摇九万里','翱翔于九天','御六气之辩','以游于无穷','至人无己矣',
+   '神人无功名','圣人无名讳','乘天地之正','与造物者游','独与天地往',
+   '上窥青天下','下潜黄泉底','挥斥八极间','神气终不变','炼形归太虚',
+   '合道入混元','一念衍万象','万法悉归宗','大衍之数尽','遁去其一留',
+   '天道本不全','缺憾亦是美','五行颠倒用','阴阳逆乱行','乾坤一掌握'],
 ];
 
-let typeState = { phrase:'', combo:0, lastPhrase:'' };
+let typeState = { phrase:'', combo:0, lastPhrase:'', deadline:0 };
 let isComposing = false;
 
 function pickPhrase() {
@@ -1161,8 +1276,12 @@ function pickPhrase() {
   typeState.phrase = phrase;
   typeState.lastPhrase = phrase;
   typeState.combo = 0;
+  // 时间限制：境界越高越紧
+  const timeLimits = [0, 0, 10, 10, 8, 6]; // realm 0-5, 0=不限时
+  const limit = timeLimits[Math.min(S.realm, timeLimits.length - 1)];
+  typeState.deadline = limit ? Date.now() + limit * 1000 : 0;
   const input = $('chat-input');
-  if (input) input.placeholder = '修炼：' + typeState.phrase;
+  if (input) input.placeholder = '修炼：' + typeState.phrase + (limit ? ' ('+limit+'s)' : '');
 }
 
 function handleCultivationInput() {
@@ -1203,45 +1322,142 @@ function handleCultivationInput() {
   }
 }
 
-// ==================== 修炼卡点 ====================
-// 复用节奏突破的 overlay，通过 state.mode 区分「修炼」和「渡劫」
+// ==================== 修炼卡点（三色随机） ====================
+
+// 红/黄/绿 比例 × 境界（已确认）
+const ZONE_RATIOS = [
+  { r:30, y:45, g:25 },  // 凡人
+  { r:35, y:42, g:23 },  // 炼气
+  { r:40, y:40, g:20 },  // 筑基
+  { r:48, y:36, g:16 },  // 金丹
+  { r:55, y:34, g:11 },  // 元婴
+  { r:62, y:30, g:8  },  // 化神
+];
+const CULT_SPEEDS = [0.008, 0.012, 0.017, 0.024, 0.030, 0.038];
 
 function startCultivation() {
   if (rhythmState && rhythmState.active) return;
-  rhythmState = { active:true, dotPos:0, direction:1, speed:0.018, greenLo:0.20, greenHi:0.80, rafId:null, mode:'cultivation' };
+  const ratio = ZONE_RATIOS[Math.min(S.realm, ZONE_RATIOS.length - 1)];
+  // 太虚剑典：绿区+3%（从红区扣）
+  const gb = S.method === 'sword' ? METHODS.sword.greenBonus / 100 : 0;
+  const rw = ratio.r / 100 - gb, yw = ratio.y / 100, gw = ratio.g / 100 + gb;
+  let zoneDefs;
+
+  if (S.realm >= 3) {
+    // 🔴 金丹+元婴：绿嵌红中（富贵险中求）
+    const rgLeft = Math.random() < 0.5;
+    const gOff = Math.random() * (rw - gw); // 绿在红内随机位置
+    if (rgLeft) {
+      zoneDefs = [
+        { color:'r', lo:0, hi:rw },
+        { color:'g', lo:gOff, hi:gOff + gw },
+        { color:'y', lo:rw, hi:1.0 }
+      ];
+    } else {
+      zoneDefs = [
+        { color:'y', lo:0, hi:yw },
+        { color:'r', lo:yw, hi:1.0 },
+        { color:'g', lo:yw + gOff, hi:yw + gOff + gw }
+      ];
+    }
+  } else {
+    // 🟢 凡人~筑基：三色分离随机排列
+    const zones = [
+      { color:'r', w: rw },
+      { color:'y', w: yw },
+      { color:'g', w: gw }
+    ];
+    for (let i = zones.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [zones[i], zones[j]] = [zones[j], zones[i]];
+    }
+    let pos = 0;
+    zoneDefs = [];
+    for (const z of zones) {
+      zoneDefs.push({ color:z.color, lo:pos, hi:pos + z.w });
+      pos += z.w;
+    }
+  }
+
+  const speed = CULT_SPEEDS[Math.min(S.realm, CULT_SPEEDS.length - 1)];
+  const rs = { active:true, dotPos:0, direction:1, speed, zones:zoneDefs, rafId:null, mode:'cultivation' };
+  rhythmState = rs;
   $('rhythm-overlay').classList.add('active');
   $('rhythm-result').textContent = '';
   $('rhythm-result').className = '';
+  const hint = S.realm >= 3 ? '绿在红中·富贵险中求 🟢暴击 🟡常规 🔴失败' : '按空格截取灵气… 🟢暴击 🟡常规 🔴失败';
   document.querySelector('#rhythm-box h3').textContent = '🧘 灵气修炼';
-  document.querySelector('#rhythm-box .rhythm-hint').textContent = '按空格键在绿色区域截取灵气…';
+  document.querySelector('#rhythm-box .rhythm-hint').textContent = hint;
   rhythmState.rafId = requestAnimationFrame(rhythmLoop);
+  // 🔴 修复bug：捕获当前rs引用，超时时检查是否是同一局
   setTimeout(() => {
-    if (rhythmState && rhythmState.active && rhythmState.mode === 'cultivation') finishCultivation();
-  }, 4000);
+    if (rhythmState === rs && rhythmState.active) finishCultivation();
+  }, 5000);
 }
 
 function finishCultivation() {
   if (!rhythmState || !rhythmState.active) return;
-  const pos = rhythmState.dotPos;
-  const inGreen = pos > rhythmState.greenLo && pos < rhythmState.greenHi;
-  rhythmState.active = false;
-  if (rhythmState.rafId) { cancelAnimationFrame(rhythmState.rafId); rhythmState.rafId = null; }
+  const rs = rhythmState;
+  const pos = rs.dotPos;
+  // 绿嵌红中模式：先检查绿（最窄），再黄，最后红
+  let hit = null;
+  const sorted = [...rs.zones].sort((a,b) => (a.hi-a.lo) - (b.hi-b.lo)); // 最窄优先
+  for (const z of sorted) {
+    if (pos >= z.lo && pos < z.hi) { hit = z.color; break; }
+  }
+  if (!hit) hit = 'r';
+  rs.active = false;
+  if (rs.rafId) { cancelAnimationFrame(rs.rafId); rs.rafId = null; }
+
   const base = (S.realm + 1) * 3;
-  const bonus = Math.floor((inGreen ? base : Math.max(1, Math.floor(base * 0.3))) * getBuffMultiplier());
-  S.lingli += bonus;
-  const quality = inGreen ? '✅' : '⚡';
-  addLog('修炼助手', `${quality} 灵气截取 → 灵力 +${bonus}${inGreen?' (精准！)':''}`, inGreen?'success':'dim');
-  // 连击
+  S._redStreak = (S._redStreak || 0);
   S._cultCombo = (S._cultCombo || 0);
-  if (inGreen) { S._cultCombo++; if (S._cultCombo > 1) addLog('修炼助手', `🔥 精准连击×${S._cultCombo}！`, 'highlight'); }
-  else S._cultCombo = 0;
-  $('rhythm-result').textContent = inGreen ? '✅ 灵气截取成功！精准！' : '灵气逸散…下次集中精神';
-  $('rhythm-result').className = inGreen ? 'success' : 'miss';
+
+  if (hit === 'g') {
+    const bonus = Math.floor(base * 1.5 * getBuffMultiplier());
+    S.lingli += bonus;
+    S._cultCombo++; S._redStreak = 0;
+    addLog('修炼助手', `🟢 暴击修炼！灵力 +${bonus}${S._cultCombo>1?' 🔥连击×'+S._cultCombo+'！':''}`, 'success');
+    $('rhythm-result').textContent = '🟢 暴击修炼！1.5倍灵力';
+    $('rhythm-result').className = 'success';
+  } else if (hit === 'y') {
+    const bonus = Math.floor(base * getBuffMultiplier());
+    S.lingli += bonus;
+    S._cultCombo++; S._redStreak = 0;
+    addLog('修炼助手', `🟡 常规修炼 → 灵力 +${bonus}`, 'dim');
+    $('rhythm-result').textContent = '🟡 常规修炼';
+    $('rhythm-result').className = 'miss';
+  } else {
+    S._redStreak++; S._cultCombo = 0;
+    S._redTotal = (S._redTotal || 0) + 1; // 走火入魔计数
+    const left = QI_DEVIATE_MAX - S._redTotal;
+    let redMsg = `🔴 灵气逸散…（连续${S._redStreak}/3次·总计${S._redTotal}/${QI_DEVIATE_MAX}）`;
+    if (S._redTotal >= QI_DEVIATE_MAX && !S._qiDeviate) {
+      S._qiDeviate = true;
+      redMsg += ' ⚠️走火入魔！修炼速度-30%';
+      addLog('系统通知', `⚠️ 灵气反噬累计过百！走火入魔——修炼速度降低30%，突破后恢复`, 'fail');
+    } else if (left <= 10 && !S._qiDeviate) {
+      redMsg += ` ⚠️危险·距走火入魔仅剩${left}次`;
+    }
+    addLog('修炼助手', redMsg, 'fail');
+    if (S._redStreak >= 3) {
+      const penalty = Math.floor(S.lingli * 0.05);
+      S.lingli = Math.max(0, S.lingli - penalty);
+      S._redStreak = 0;
+      addLog('系统通知', `⚠️ 连续3次灵气逸散！灵力反噬 -${penalty}`, 'fail');
+    }
+    $('rhythm-result').textContent = S._redStreak >= 3 ? '⚠️ 灵力反噬！' : `🔴 逸散·${S._redStreak}/3`;
+    $('rhythm-result').className = 'miss';
+  }
+
+  // 🔴 修复bug：捕获引用，跨局不覆盖
   setTimeout(() => {
-    $('rhythm-overlay').classList.remove('active');
-    rhythmState = null;
+    if (rhythmState === rs || (rhythmState && !rhythmState.active)) {
+      $('rhythm-overlay').classList.remove('active');
+      rhythmState = null;
+    }
     renderAll();
-  }, 600);
+  }, 800);
 }
 
 // ==================== 节奏突破（渡劫） ====================
@@ -1249,18 +1465,19 @@ function finishCultivation() {
 function startRhythmBreakthrough() {
   if (rhythmState && rhythmState.active) return; // 防重入
   // 境界越高 → 绿色区越窄 + 光点越快
-  const zone = [0.25, 0.30, 0.335, 0.37][S.realm] || 0.33;
-  const speed = [0.008, 0.012, 0.017, 0.024][S.realm] || 0.012;
-  rhythmState = { active:true, dotPos:0, direction:1, speed, greenLo:zone, greenHi:1-zone, rafId:null, mode:'breakthrough' };
+  const zone = [0.25, 0.30, 0.335, 0.37, 0.40, 0.43][S.realm] || 0.40;
+  const speed = [0.008, 0.012, 0.017, 0.024, 0.030, 0.038][S.realm] || 0.030;
+  const brs = { active:true, dotPos:0, direction:1, speed, greenLo:zone, greenHi:1-zone, rafId:null, mode:'breakthrough' };
+  rhythmState = brs;
   $('rhythm-overlay').classList.add('active');
   $('rhythm-result').textContent = '';
   $('rhythm-result').className = '';
   document.querySelector('#rhythm-box h3').textContent = '⚡ 天劫降临';
   document.querySelector('#rhythm-box .rhythm-hint').textContent = '按空格键在绿色区域截断灵气…';
   rhythmState.rafId = requestAnimationFrame(rhythmLoop);
-  // 5秒超时自动完成
+  // 5秒超时自动完成（捕获引用防跨局覆盖）
   setTimeout(() => {
-    if (rhythmState && rhythmState.active) finishRhythmBreakthrough();
+    if (rhythmState === brs && rhythmState.active) finishRhythmBreakthrough();
   }, 5000);
 }
 
@@ -1270,17 +1487,17 @@ function rhythmLoop() {
   if (rhythmState.dotPos >= 1) { rhythmState.dotPos = 1; rhythmState.direction = -1; }
   if (rhythmState.dotPos <= 0) { rhythmState.dotPos = 0; rhythmState.direction = 1; }
   renderRhythm();
-  rhythmState.rafId = requestAnimationFrame(rhythmLoop);
+  if (rhythmState && rhythmState.active) rhythmState.rafId = requestAnimationFrame(rhythmLoop);
 }
 
 function finishRhythmBreakthrough() {
   if (!rhythmState || !rhythmState.active) return;
-  const pos = rhythmState.dotPos;
-  const inGreen = pos > rhythmState.greenLo && pos < rhythmState.greenHi;
-  rhythmState.active = false;
-  if (rhythmState.rafId) { cancelAnimationFrame(rhythmState.rafId); rhythmState.rafId = null; }
+  const brs = rhythmState;
+  const pos = brs.dotPos;
+  const inGreen = pos > brs.greenLo && pos < brs.greenHi;
+  brs.active = false;
+  if (brs.rafId) { cancelAnimationFrame(brs.rafId); brs.rafId = null; }
   const bonus = inGreen ? 0.30 : 0;
-  // 显示结果
   if (inGreen) {
     $('rhythm-result').textContent = '✅ 灵气截断成功！突破率 +30%';
     $('rhythm-result').className = 'success';
@@ -1288,10 +1505,12 @@ function finishRhythmBreakthrough() {
     $('rhythm-result').textContent = '未能截住灵气…正常概率突破';
     $('rhythm-result').className = 'miss';
   }
-  // 延迟关闭 overlay + 执行突破
+  // 延迟关闭 overlay（捕获引用防跨局覆盖）
   setTimeout(() => {
-    $('rhythm-overlay').classList.remove('active');
-    rhythmState = null;
+    if (rhythmState === brs || (rhythmState && !rhythmState.active)) {
+      $('rhythm-overlay').classList.remove('active');
+      rhythmState = null;
+    }
     executeBreakthrough(bonus);
   }, 800);
 }
@@ -1310,14 +1529,20 @@ function executeBreakthrough(rhythmBonus) {
   let prob = cfg.prob;
   if (S.pity >= PITY_MAX + 1) prob = 1;
   if (S.breakthroughBoost > 0) { prob = Math.min(1, prob + 0.2); S.breakthroughBoost = 0; }
+  if (S.method === 'sword') prob = Math.min(1, prob + METHODS.sword.breakthrough);
   prob = Math.min(1, prob + rhythmBonus);
 
   if (Math.random() < prob) {
     S.realm++; S.pity = 0; S.breakCount++;
+    S._redTotal = 0; S._qiDeviate = false; // 突破后走火入魔清零
     const rn = REALM_NAMES[S.realm], rate = REALM_RATES[S.realm];
     addLog('系统通知', `⚡ 天劫渡过！突破至【${rn}】！灵力产出提升至 ${rate}/秒${rhythmBonus>0?' (卡点加成+30%)':''}`, 'success');
     if (S.realm === 3) addLog('系统通知', '🔓 解锁：炼丹炉', 'highlight');
     if (S.realm === 4) addLog('系统通知', '🔓 解锁：法宝阁', 'highlight');
+    if (S.realm === 5) {
+      addLog('系统通知', '🔓 解锁：功法选择！请选择你的修炼之路', 'highlight');
+      showMethodSelection();
+    }
   } else {
     const refund = Math.floor(cfg.cost * FAIL_REFUND);
     S.lingli += refund;
@@ -1369,6 +1594,14 @@ function tick() {
     S.totalSec++;
   }
 
+  // 打字超时检查
+  if (typeState.deadline && Date.now() > typeState.deadline && typeState.phrase) {
+    addLog('修炼助手', `⏰ 灵气消散…「${typeState.phrase}」未及时截取`, 'dim');
+    const input = $('chat-input');
+    if (input) { input.value = ''; input.style.background = '#fff5f0'; setTimeout(() => { input.style.background = ''; }, 300); }
+    pickPhrase();
+  }
+
   // 检查炼丹完成
   const craft = checkCraft();
   if (craft) addLog('炼丹炉', `💊 丹炉开启！获得 ${craft.name} ×1`, 'success');
@@ -1400,6 +1633,64 @@ function tick() {
 // ==================== 初始化和事件 ====================
 
 function resetSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+  location.reload();
+}
+
+async function exportSave() {
+  const data = JSON.stringify(S, null, 2);
+  const fname = 'xiuxian_save_' + new Date().toISOString().slice(0,10) + '.json';
+  // 方案1: 原生保存对话框（需HTTPS/localhost）
+  if (window.isSecureContext && window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fname,
+        types: [{ description: 'JSON存档', accept: { 'application/json': ['.json'] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(data);
+      await writable.close();
+      addLog('系统通知', '💾 存档已保存到选定位置', 'dim');
+      renderAll();
+      return;
+    } catch(e) { /* 用户取消或API不可用→降级 */ }
+  }
+  // 方案2: 新窗口展示JSON→Ctrl+S手动保存（file://可用）
+  const w = window.open('', '_blank', 'width=600,height=400');
+  if (w) {
+    w.document.write('<pre style="font:13px monospace;padding:12px;">' + data.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>');
+    w.document.close();
+    w.document.title = fname;
+    addLog('系统通知', '💾 存档已在新窗口打开 → Ctrl+S 保存到任意文件夹', 'dim');
+  } else {
+    // 方案3: 兜底下载
+    const blob = new Blob([data], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = fname; a.click();
+    addLog('系统通知', '💾 存档已下载（浏览器默认目录）', 'dim');
+  }
+  renderAll();
+}
+
+function importSave(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.realm === undefined || data.lingli === undefined) throw new Error('无效存档');
+      S = data; S.lastOnline = Date.now(); S._offlineLingli = 0;
+      addLog('系统通知', '📥 存档导入成功！欢迎回来', 'success');
+      save(); renderAll();
+    } catch(err) {
+      addLog('系统通知', '❌ 存档格式无效', 'fail');
+      renderAll();
+    }
+  };
+  reader.readAsText(file);
+}
+
+function newGame() {
+  if (!confirm('确定开始新游戏？当前存档将被清除。\n\n💡 建议先用 💾 导出存档备份。')) return;
   try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
   location.reload();
 }
@@ -1441,6 +1732,16 @@ function init() {
 
   // 标题栏切换伪装
   $('tb-name').addEventListener('click', toggleDisguise);
+
+  // 存档导入导出
+  $('btn-save').addEventListener('click', exportSave);
+  $('btn-newgame').addEventListener('click', newGame);
+  // 拖拽/选择存档文件导入
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.accept = '.json'; fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+  fileInput.addEventListener('change', (e) => { if (e.target.files[0]) importSave(e.target.files[0]); });
+  $('btn-save').addEventListener('dblclick', () => { fileInput.click(); });
 
   // 联系人点击
   $('contact-list').addEventListener('click', (e) => {
@@ -1516,12 +1817,26 @@ function renderRhythm() {
   }
   const bar = $('rhythm-bar');
   const dot = $('rhythm-dot');
-  const zone = $('rhythm-zone');
-  if (!bar || !dot || !zone) return;
+  const zr = $('rhythm-zone-r');
+  const zy = $('rhythm-zone-y');
+  const zg = $('rhythm-zone-g');
+  if (!bar || !dot) return;
   $('rhythm-overlay').classList.add('active');
   dot.style.left = (rhythmState.dotPos * (bar.clientWidth - 12)) + 'px';
-  zone.style.left = (rhythmState.greenLo * 100) + '%';
-  zone.style.right = ((1 - rhythmState.greenHi) * 100) + '%';
+
+  if (rhythmState.mode === 'cultivation' && rhythmState.zones) {
+    // 三色随机模式
+    for (const z of rhythmState.zones) {
+      if (z.color === 'r') { if(zr){ zr.style.left=(z.lo*100)+'%'; zr.style.right=((1-z.hi)*100)+'%'; zr.style.display='block'; } }
+      if (z.color === 'y') { if(zy){ zy.style.left=(z.lo*100)+'%'; zy.style.right=((1-z.hi)*100)+'%'; zy.style.display='block'; } }
+      if (z.color === 'g') { if(zg){ zg.style.left=(z.lo*100)+'%'; zg.style.right=((1-z.hi)*100)+'%'; zg.style.display='block'; } }
+    }
+  } else {
+    // 渡劫单绿色模式
+    if(zr) zr.style.display='none';
+    if(zy) zy.style.display='none';
+    if(zg){ zg.style.left=(rhythmState.greenLo*100)+'%'; zg.style.right=((1-rhythmState.greenHi)*100)+'%'; zg.style.display='block'; }
+  }
 }
 
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
