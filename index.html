@@ -454,11 +454,20 @@ const CONTACTS = [
   { id:'divination',name:'每日占卜',  icon:'🔮', unlock:0, color:'#a855f7' },
   { id:'alchemy',  name:'炼丹炉',     icon:'💊', unlock:3, color:'#e2b04a' },
   { id:'forge',    name:'法宝阁',     icon:'⚔️', unlock:4, color:'#4ea8c9' },
+  { id:'disguise_cfg', name:'伪装设置', icon:'🎭', unlock:0, color:'#888' },
 ];
 
-// ==================== 伪装消息模板 ====================
+// ==================== 伪装配置（可自定义） ====================
 
-const FAKE_CHATS = [
+const DEFAULT_DISGUISE_CONTACTS = [
+  { id:'d1',name:'项目组-李工',icon:'👤',color:'#4ea8c9' },
+  { id:'d2',name:'财务-王姐',icon:'👩',color:'#e2b04a' },
+  { id:'d3',name:'HR-小张',icon:'👤',color:'#a855f7' },
+  { id:'d4',name:'运维-老刘',icon:'👨',color:'#07c160' },
+  { id:'d5',name:'行政-陈',icon:'👩',color:'#fa5151' },
+];
+
+const DEFAULT_DISGUISE_CHATS = [
   { from:'项目组-李工', text:'那个需求文档我更新了，你看下第三部分' },
   { from:'财务-王姐', text:'这个月的报销截止到周五，别忘了提交' },
   { from:'项目组-李工', text:'好的，明天开会讨论一下排期' },
@@ -729,18 +738,31 @@ function renderTitlebar() {
 function renderSidebar() {
   const list = $('contact-list');
   let html = '';
-  for (const c of CONTACTS) {
-    const unlocked = S.realm >= c.unlock;
-    const unread = getUnreadCount(c.id);
-    const active = activeContact === c.id ? ' active' : '';
-    html += `<div class="sb-contact${active}" data-contact="${c.id}">
-      <div class="sc-avatar" style="font-size:18px;">${unlocked ? c.icon : '🔒'}</div>
-      <div class="sc-info">
-        <div class="sc-name">${c.name}${!unlocked ? ' (未解锁)' : ''}</div>
-        <div class="sc-preview">${getPreview(c.id)}</div>
-      </div>
-      ${unread > 0 ? `<div class="sc-badge">${unread}</div>` : ''}
-    </div>`;
+  if (disguise) {
+    const dc = getDisguiseContacts();
+    for (const c of dc) {
+      html += `<div class="sb-contact" data-contact="${c.id}">
+        <div class="sc-avatar" style="font-size:18px;">${c.icon}</div>
+        <div class="sc-info">
+          <div class="sc-name">${c.name}</div>
+          <div class="sc-preview">[新消息]</div>
+        </div>
+      </div>`;
+    }
+  } else {
+    for (const c of CONTACTS) {
+      const unlocked = S.realm >= c.unlock;
+      const unread = getUnreadCount(c.id);
+      const active = activeContact === c.id ? ' active' : '';
+      html += `<div class="sb-contact${active}" data-contact="${c.id}">
+        <div class="sc-avatar" style="font-size:18px;">${unlocked ? c.icon : '🔒'}</div>
+        <div class="sc-info">
+          <div class="sc-name">${c.name}${!unlocked ? ' (未解锁)' : ''}</div>
+          <div class="sc-preview">${getPreview(c.id)}</div>
+        </div>
+        ${unread > 0 ? `<div class="sc-badge">${unread}</div>` : ''}
+      </div>`;
+    }
   }
   list.innerHTML = html;
 }
@@ -768,6 +790,11 @@ function getUnreadCount(contactId) {
 }
 
 function renderSidebarFooter() {
+  if (disguise) {
+    $('ft-online').textContent = '';
+    $('ft-ver').textContent = '微信电脑版';
+    return;
+  }
   const offlineEff = Math.floor((OFFLINE_RATE + S.offlineBonus + (S.equippedTreasure==='headphone'?0.10:0) + (S.method==='pill'?METHODS.pill.offline:0)) * 100);
   const capH = Math.floor((OFFLINE_CAP + (S.equippedTreasure==='chair'?14400:0)) / 3600);
   const redInfo = (S._redTotal || 0) > 0 ? ` | 红雷:${S._redTotal}/${QI_DEVIATE_MAX}` : '';
@@ -797,6 +824,7 @@ function renderMessages() {
     if (activeContact === 'divination') renderDivinationPanel();
     else if (activeContact === 'alchemy' && S.realm >= 3) renderAlchemyPanel();
     else if (activeContact === 'forge' && S.realm >= 4) renderTreasurePanel();
+    else if (activeContact === 'disguise_cfg') renderDisguiseSettings();
     container.scrollTop = container.scrollHeight;
     return;
   }
@@ -854,11 +882,94 @@ function buildFullChat() {
   return html || buildMsg('修炼助手', '点击下方输入框开始修炼…');
 }
 
+function getDisguiseContacts() { return S._disguiseContacts || DEFAULT_DISGUISE_CONTACTS; }
+function getDisguiseChats() { return S._disguiseChats || DEFAULT_DISGUISE_CHATS; }
+
+function renderDisguiseSettings() {
+  const container = $('messages');
+  const contacts = getDisguiseContacts();
+  const chats = getDisguiseChats();
+  let html = container.innerHTML;
+
+  // 联系人列表
+  html += buildMsg('伪装设置', '📋 伪装联系人（Esc伪装模式下显示）', '');
+  let contactRows = '';
+  contacts.forEach((c,i) => {
+    contactRows += `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:12px;">
+      <span>${c.icon}</span><span>${c.name}</span>
+      <button class="bubble-btn" style="font-size:10px;padding:1px 6px;" data-dc-edit="${i}">✏️</button>
+      <button class="bubble-btn danger" style="font-size:10px;padding:1px 6px;" data-dc-del="${i}">✕</button>
+    </div>`;
+  });
+  html += `<div class="msg msg-from"><div class="bubble">${contactRows}<button class="bubble-btn" id="btn-dc-add" style="margin-top:4px;">+ 添加联系人</button></div></div>`;
+
+  // 聊天记录
+  html += buildMsg('伪装设置', '💬 伪装聊天记录', '');
+  let chatRows = '';
+  chats.forEach((c,i) => {
+    chatRows += `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;">
+      <span style="color:#999;">${c.from}:</span><span>${c.text.slice(0,20)}…</span>
+      <button class="bubble-btn" style="font-size:10px;padding:1px 6px;" data-dm-edit="${i}">✏️</button>
+      <button class="bubble-btn danger" style="font-size:10px;padding:1px 6px;" data-dm-del="${i}">✕</button>
+    </div>`;
+  });
+  html += `<div class="msg msg-from"><div class="bubble">${chatRows}<button class="bubble-btn" id="btn-dm-add" style="margin-top:4px;">+ 添加聊天</button></div></div>`;
+
+  html += buildMsg('伪装设置', '🔄 点击上方按钮编辑·修改后自动保存。伪装模式 Esc 切换查看效果。','dim');
+
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+
+  // 事件绑定
+  container.querySelectorAll('[data-dc-edit]').forEach(b => {
+    b.addEventListener('click', () => {
+      const i = parseInt(b.dataset.dcEdit);
+      const c = contacts[i];
+      const n = prompt('联系人名称：', c.name);
+      if (n !== null) { c.name = n || c.name; const ic = prompt('图标(emoji)：', c.icon); if (ic !== null) c.icon = ic || c.icon; saveDisguise(); renderAll(); }
+    });
+  });
+  container.querySelectorAll('[data-dc-del]').forEach(b => {
+    b.addEventListener('click', () => {
+      const i = parseInt(b.dataset.dcDel);
+      contacts.splice(i, 1); saveDisguise(); renderAll();
+    });
+  });
+  document.getElementById('btn-dc-add')?.addEventListener('click', () => {
+    const n = prompt('联系人名称：', '同事-新');
+    if (n) { contacts.push({ id:'d'+Date.now(), name:n, icon:'👤', color:'#4ea8c9' }); saveDisguise(); renderAll(); }
+  });
+  container.querySelectorAll('[data-dm-edit]').forEach(b => {
+    b.addEventListener('click', () => {
+      const i = parseInt(b.dataset.dmEdit);
+      const c = chats[i];
+      const f = prompt('发送者：', c.from);
+      if (f !== null) { c.from = f || c.from; const t = prompt('消息内容：', c.text); if (t !== null) c.text = t || c.text; saveDisguise(); renderAll(); }
+    });
+  });
+  container.querySelectorAll('[data-dm-del]').forEach(b => {
+    b.addEventListener('click', () => {
+      const i = parseInt(b.dataset.dmDel);
+      chats.splice(i, 1); saveDisguise(); renderAll();
+    });
+  });
+  document.getElementById('btn-dm-add')?.addEventListener('click', () => {
+    const f = prompt('发送者：', '你');
+    if (f) { const t = prompt('消息内容：', '好的收到'); if (t) { chats.push({ from:f, text:t }); saveDisguise(); renderAll(); } }
+  });
+}
+
+function saveDisguise() {
+  S._disguiseContacts = getDisguiseContacts();
+  S._disguiseChats = getDisguiseChats();
+  save();
+}
+
 function renderFakeChat() {
   let html = '';
   const ts = ['09:42','09:45','10:03','10:15','10:28','10:30','10:31','10:45','11:02','11:12','11:15','11:18'];
   for (let i = 0; i < 6; i++) {
-    const c = FAKE_CHATS[Math.floor(Math.random() * FAKE_CHATS.length)];
+    const c = getDisguiseChats()[Math.floor(Math.random() * getDisguiseChats().length)];
     const isMe = c.from === '你';
     const time = ts[Math.floor(Math.random() * ts.length)];
     html += isMe
@@ -889,6 +1000,7 @@ function buildCard(from, title, rows) {
 
 function renderActions() {
   const bar = $('action-bar');
+  if (disguise) { bar.innerHTML = ''; return; }
   let html = '';
 
   // 功法/走火入魔状态
@@ -949,6 +1061,7 @@ function renderActions() {
 function renderProgress() {
   const bar = $('bt-progress');
   if (!bar) return;
+  if (disguise) { bar.className = 'bt-progress'; return; }
   if (S.realm >= BREAKTHROUGH.length) {
     // 已满级
     bar.className = 'bt-progress visible ready';
@@ -1333,7 +1446,7 @@ const ZONE_RATIOS = [
   { r:55, y:34, g:11 },  // 元婴
   { r:62, y:30, g:8  },  // 化神
 ];
-const CULT_SPEEDS = [0.008, 0.012, 0.017, 0.024, 0.030, 0.038];
+const CULT_SPEEDS = [0.007, 0.011, 0.015, 0.020, 0.027, 0.034];
 
 function startCultivation() {
   if (rhythmState && rhythmState.active) return;
@@ -1466,7 +1579,7 @@ function startRhythmBreakthrough() {
   if (rhythmState && rhythmState.active) return; // 防重入
   // 境界越高 → 绿色区越窄 + 光点越快
   const zone = [0.25, 0.30, 0.335, 0.37, 0.40, 0.43][S.realm] || 0.40;
-  const speed = [0.008, 0.012, 0.017, 0.024, 0.030, 0.038][S.realm] || 0.030;
+  const speed = [0.007, 0.011, 0.015, 0.020, 0.027, 0.034][S.realm] || 0.027;
   const brs = { active:true, dotPos:0, direction:1, speed, greenLo:zone, greenHi:1-zone, rafId:null, mode:'breakthrough' };
   rhythmState = brs;
   $('rhythm-overlay').classList.add('active');
@@ -1497,12 +1610,11 @@ function finishRhythmBreakthrough() {
   const inGreen = pos > brs.greenLo && pos < brs.greenHi;
   brs.active = false;
   if (brs.rafId) { cancelAnimationFrame(brs.rafId); brs.rafId = null; }
-  const bonus = inGreen ? 0.30 : 0;
   if (inGreen) {
-    $('rhythm-result').textContent = '✅ 灵气截断成功！突破率 +30%';
+    $('rhythm-result').textContent = '✅ 灵气截断成功！';
     $('rhythm-result').className = 'success';
   } else {
-    $('rhythm-result').textContent = '未能截住灵气…正常概率突破';
+    $('rhythm-result').textContent = '❌ 未能截住灵气…突破失败';
     $('rhythm-result').className = 'miss';
   }
   // 延迟关闭 overlay（捕获引用防跨局覆盖）
@@ -1511,7 +1623,8 @@ function finishRhythmBreakthrough() {
       $('rhythm-overlay').classList.remove('active');
       rhythmState = null;
     }
-    executeBreakthrough(bonus);
+    // 不命中=直接失败（-1标记），命中=原逻辑
+    executeBreakthrough(inGreen ? 0.30 : -1);
   }, 800);
 }
 
@@ -1523,6 +1636,15 @@ function executeBreakthrough(rhythmBonus) {
   const cfg = BREAKTHROUGH[S.realm];
   if (S.lingli < cfg.cost) {
     addLog('系统通知', `灵力不足！需要 ${cfg.cost}，当前 ${S.lingli}`, 'fail');
+    return;
+  }
+  // rhythmBonus === -1：卡点未命中 → 直接失败
+  if (rhythmBonus < 0) {
+    S.lingli -= cfg.cost;
+    const refund = Math.floor(cfg.cost * FAIL_REFUND);
+    S.lingli += refund; S.pity++;
+    addLog('系统通知', `❌ 灵气截断失败…突破失败。灵力回流：+${refund.toLocaleString()}（保底${S.pity}次）`, 'fail');
+    renderAll();
     return;
   }
   S.lingli -= cfg.cost; S.pity++;
@@ -1743,8 +1865,9 @@ function init() {
   fileInput.addEventListener('change', (e) => { if (e.target.files[0]) importSave(e.target.files[0]); });
   $('btn-save').addEventListener('dblclick', () => { fileInput.click(); });
 
-  // 联系人点击
+  // 联系人点击（伪装模式下不切换）
   $('contact-list').addEventListener('click', (e) => {
+    if (disguise) return;
     const el = e.target.closest('.sb-contact');
     if (!el) return;
     activeContact = el.dataset.contact;
