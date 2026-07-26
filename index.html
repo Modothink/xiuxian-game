@@ -355,7 +355,8 @@ html, body {
       <div class="sb-footer">
         <span id="ft-online">—</span>
         <span id="ft-ver">修炼日志 v1.0</span>
-        <button class="sb-btn" id="btn-save" title="单击导出·双击导入存档">💾</button>
+        <button class="sb-btn" id="btn-save" title="导出存档">💾</button>
+        <button class="sb-btn" id="btn-load" title="导入存档">📥</button>
         <button class="sb-btn" id="btn-newgame" title="新游戏（清空存档）">🔄</button>
       </div>
     </div>
@@ -1858,12 +1859,11 @@ function init() {
   // 存档导入导出
   $('btn-save').addEventListener('click', exportSave);
   $('btn-newgame').addEventListener('click', newGame);
-  // 拖拽/选择存档文件导入
   const fileInput = document.createElement('input');
   fileInput.type = 'file'; fileInput.accept = '.json'; fileInput.style.display = 'none';
   document.body.appendChild(fileInput);
   fileInput.addEventListener('change', (e) => { if (e.target.files[0]) importSave(e.target.files[0]); });
-  $('btn-save').addEventListener('dblclick', () => { fileInput.click(); });
+  $('btn-load').addEventListener('click', () => { fileInput.click(); });
 
   // 联系人点击（伪装模式下不切换）
   $('contact-list').addEventListener('click', (e) => {
