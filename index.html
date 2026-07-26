@@ -349,7 +349,7 @@ html, body {
       <div id="input-area">
         <div id="bt-progress" class="bt-progress"></div>
         <div class="input-box-wrap">
-          <textarea id="chat-input" placeholder="修炼：运转周天" rows="1"></textarea>
+          <textarea id="chat-input" placeholder="输入消息…" rows="1"></textarea>
           <button class="send-btn" id="send-btn">发送</button>
         </div>
         <div class="action-bar" id="action-bar">
@@ -855,12 +855,9 @@ function renderActions() {
   const bar = $('action-bar');
   let html = '';
 
-  // 打字修炼提示
-  if (!typeState.phrase) pickPhrase();
-  const comboStr = typeState.combo > 1 ? ` 🔥连击×${typeState.combo}` : '';
-  const base = typeState.phrase ? typeState.phrase.length * (S.realm + 1) * 2 : 0;
-  const reward = Math.floor(base * getBuffMultiplier());
-  html += `<span class="action-chip" style="cursor:default;background:transparent;color:#999;font-size:11px;">⌨️ 修炼词 +${reward}灵力${comboStr}</span>`;
+  // 修炼卡点按钮
+  const cultInfo = S._cultCombo > 1 ? ` 🔥连击×${S._cultCombo}` : '';
+  html += `<button class="action-chip accent" id="act-cultivate">🧘 修炼${cultInfo}</button>`;
 
   // 突破按钮
   if (S.realm < BREAKTHROUGH.length) {
@@ -882,6 +879,8 @@ function renderActions() {
   bar.innerHTML = html;
 
   // 绑定事件
+  const cb = $('act-cultivate');
+  if (cb) cb.addEventListener('click', () => { startCultivation(); });
   const bb = $('act-breakthrough');
   if (bb) bb.addEventListener('click', () => {
     if (S.realm >= BREAKTHROUGH.length) { addLog('系统通知','已是当前版本最高境界','fail'); renderAll(); return; }
@@ -1114,100 +1113,45 @@ function triggerRandomEvent() {
   return null;
 }
 
-// ==================== 打字修炼 ====================
+// ==================== 修炼卡点 ====================
+// 复用节奏突破的 overlay，通过 state.mode 区分「修炼」和「渡劫」
 
-const CULTIVATION_PHRASES = [
-  // realm 0: 凡人（20词）
-  ['运转周天','凝神静气','灵气汇聚','入门修炼','气沉丹田','打通经脉',
-   '吐纳调息','静坐冥想','引气入体','炼精化气','养气存神','真气流转',
-   '调息养神','存思守一','筑基培元','丹田蓄气','经脉初通','灵气感知',
-   '心静如水','抱元守一'],
-  // realm 1: 炼气（20词）
-  ['筑基修炼','灵力运转','周天圆满','炼气化神','灵气逼人','丹田发热',
-   '真气涌动','百脉贯通','灵气如泉','御气飞行','气贯长虹','紫气东来',
-   '灵气化液','丹田如炉','经脉扩张','神与气合','气冲霄汉','炼气成罡',
-   '真气化形','灵光闪现'],
-  // realm 2: 筑基（20词）
-  ['金丹大道','凝气成丹','三花聚顶','筑基圆满','灵力如潮','道心初成',
-   '五气归元','凝丹结胎','炉火纯青','真元凝聚','丹光内敛','神气交融',
-   '大道之门','灵台清明','金丹初成','龙虎交媾','坎离相交','铅汞调和',
-   '性命双修','阴阳和合'],
-  // realm 3: 金丹（20词）
-  ['元婴初现','五气朝元','金丹大成','天人交感','御剑飞行','元神出窍',
-   '丹破婴生','金液还丹','九转功成','紫府元婴','天地共鸣','法相初显',
-   '金丹九转','灵婴坐照','神游太虚','剑意通玄','法则感悟','虚空凝剑',
-   '丹霞满天','乘风御剑'],
-  // realm 4: 元婴（20词）
-  ['化神之路','破碎虚空','天人合一','万法归宗','大道至简','羽化登仙',
-   '元神大成','虚空造物','法则圆满','以身合道','斩却三尸','超脱轮回',
-   '洪荒之力','开天辟地','混沌初开','大道共鸣','万劫不灭','演化天地',
-   '一念通天','返虚入浑'],
-];
-
-let typeState = { phrase:'', combo:0, lastPhrase:'' };
-let isComposing = false;
-
-function pickPhrase() {
-  const pool = CULTIVATION_PHRASES[Math.min(S.realm, CULTIVATION_PHRASES.length - 1)];
-  // 避免与上一词重复（池子≥2时）
-  let phrase;
-  do {
-    phrase = pool[Math.floor(Math.random() * pool.length)];
-  } while (phrase === typeState.lastPhrase && pool.length > 1);
-  typeState.phrase = phrase;
-  typeState.lastPhrase = phrase;
-  typeState.combo = 0;
-  const input = $('chat-input');
-  if (input) input.placeholder = '修炼：' + typeState.phrase;
+function startCultivation() {
+  if (rhythmState && rhythmState.active) return;
+  rhythmState = { active:true, dotPos:0, direction:1, speed:0.018, greenLo:0.20, greenHi:0.80, rafId:null, mode:'cultivation' };
+  $('rhythm-overlay').classList.add('active');
+  $('rhythm-result').textContent = '';
+  $('rhythm-result').className = '';
+  document.querySelector('#rhythm-box h3').textContent = '🧘 灵气修炼';
+  document.querySelector('#rhythm-box .rhythm-hint').textContent = '按空格键在绿色区域截取灵气…';
+  rhythmState.rafId = requestAnimationFrame(rhythmLoop);
+  setTimeout(() => {
+    if (rhythmState && rhythmState.active && rhythmState.mode === 'cultivation') finishCultivation();
+  }, 4000);
 }
 
-function handleCultivationInput() {
-  const input = $('chat-input');
-  if (!input || disguise || !typeState.phrase) return;
-  if (isComposing) return; // 输入法组合中，跳过校验
-  const val = input.value;
-  if (!val) return;
-
-  // 找出最长匹配前缀
-  let matchLen = 0;
-  for (let i = 0; i < val.length && i < typeState.phrase.length; i++) {
-    if (val[i] === typeState.phrase[i]) {
-      matchLen++;
-    } else {
-      break;
-    }
-  }
-
-  // 完全没匹配 → 红色闪烁 + 清空
-  if (matchLen === 0) {
-    input.style.background = '#ffe0e0';
-    setTimeout(() => { input.style.background = ''; input.value = ''; }, 200);
-    return;
-  }
-
-  // 首字就错或中途打错 → 保留已对的字，只清除错字
-  if (matchLen < val.length) {
-    input.style.background = '#ffe0e0';
-    input.value = typeState.phrase.substring(0, matchLen);
-    setTimeout(() => { input.style.background = ''; }, 200);
-    return;
-  }
-
-  // 完全匹配！
-  if (val === typeState.phrase) {
-    const base = typeState.phrase.length * (S.realm + 1) * 2;
-    const bonus = Math.floor(base * getBuffMultiplier());
-    S.lingli += bonus;
-    typeState.combo++;
-    const comboText = typeState.combo > 1 ? ` 🔥连击×${typeState.combo}！` : '';
-    addLog('修炼助手', `✅ ${typeState.phrase} → 灵力 +${bonus}${comboText}`, 'success');
-    input.style.background = '#e0ffe0';
-    setTimeout(() => { input.style.background = ''; }, 200);
-    input.value = '';
-    pickPhrase();
-    renderTitlebar();
-    if (activeContact === 'assistant' || activeContact === 'system') renderMessages();
-  }
+function finishCultivation() {
+  if (!rhythmState || !rhythmState.active) return;
+  const pos = rhythmState.dotPos;
+  const inGreen = pos > rhythmState.greenLo && pos < rhythmState.greenHi;
+  rhythmState.active = false;
+  if (rhythmState.rafId) { cancelAnimationFrame(rhythmState.rafId); rhythmState.rafId = null; }
+  const base = (S.realm + 1) * 3;
+  const bonus = Math.floor((inGreen ? base : Math.max(1, Math.floor(base * 0.3))) * getBuffMultiplier());
+  S.lingli += bonus;
+  const quality = inGreen ? '✅' : '⚡';
+  addLog('修炼助手', `${quality} 灵气截取 → 灵力 +${bonus}${inGreen?' (精准！)':''}`, inGreen?'success':'dim');
+  // 连击
+  S._cultCombo = (S._cultCombo || 0);
+  if (inGreen) { S._cultCombo++; if (S._cultCombo > 1) addLog('修炼助手', `🔥 精准连击×${S._cultCombo}！`, 'highlight'); }
+  else S._cultCombo = 0;
+  $('rhythm-result').textContent = inGreen ? '✅ 灵气截取成功！精准！' : '灵气逸散…下次集中精神';
+  $('rhythm-result').className = inGreen ? 'success' : 'miss';
+  setTimeout(() => {
+    $('rhythm-overlay').classList.remove('active');
+    rhythmState = null;
+    renderAll();
+  }, 600);
 }
 
 // ==================== 节奏突破（渡劫） ====================
@@ -1217,10 +1161,12 @@ function startRhythmBreakthrough() {
   // 境界越高 → 绿色区越窄 + 光点越快
   const zone = [0.25, 0.30, 0.335, 0.37][S.realm] || 0.33;
   const speed = [0.008, 0.012, 0.017, 0.024][S.realm] || 0.012;
-  rhythmState = { active:true, dotPos:0, direction:1, speed, greenLo:zone, greenHi:1-zone, rafId:null };
+  rhythmState = { active:true, dotPos:0, direction:1, speed, greenLo:zone, greenHi:1-zone, rafId:null, mode:'breakthrough' };
   $('rhythm-overlay').classList.add('active');
   $('rhythm-result').textContent = '';
   $('rhythm-result').className = '';
+  document.querySelector('#rhythm-box h3').textContent = '⚡ 天劫降临';
+  document.querySelector('#rhythm-box .rhythm-hint').textContent = '按空格键在绿色区域截断灵气…';
   rhythmState.rafId = requestAnimationFrame(rhythmLoop);
   // 5秒超时自动完成
   setTimeout(() => {
@@ -1430,25 +1376,22 @@ function init() {
       }
       if (e.key === ' ' && document.activeElement !== $('chat-input')) {
         e.preventDefault();
-        finishRhythmBreakthrough();
+        if (rhythmState.mode === 'cultivation') finishCultivation();
+        else finishRhythmBreakthrough();
         return;
       }
-      return; // 渡劫中拦截所有其他按键
+      return; // 修炼/渡劫中拦截所有其他按键
     }
 
     if (e.key === 'Escape') { e.preventDefault(); toggleDisguise(); return; }
     if (e.ctrlKey && e.shiftKey && e.key === 'H') { e.preventDefault(); bossKey(); return; }
   });
 
-  // 输入框打字修炼
-  $('chat-input').addEventListener('input', handleCultivationInput);
-  // 输入法组合事件：组合中跳过打字校验，避免拼音触发误判
-  $('chat-input').addEventListener('compositionstart', () => { isComposing = true; });
-  $('chat-input').addEventListener('compositionend', () => { isComposing = false; });
+  // 输入框（伪装用，无功能）
 
-  // 输入框回车=发送（阻止换行，在伪装模式下无意义，游戏模式下触发打字检查）
+  // 输入框回车=阻止换行（伪装用）
   $('chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); handleCultivationInput(); }
+    if (e.key === 'Enter') e.preventDefault();
   });
 }
 
